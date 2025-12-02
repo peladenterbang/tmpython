@@ -1,0 +1,390 @@
+{% extends 'base.html' %}
+
+{% block title %}Technical Analysis - Forex Risk Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="bi bi-graph-up"></i> Technical Analysis & Prediction</h2>
+        <p class="text-muted">Analyze live price data using MA, RSI, MACD, and Bollinger Bands</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Input Section -->
+    <div class="col-md-5">
+        <!-- Live Data Card -->
+        <div class="card mb-3">
+            <div class="card-header bg-success text-white">
+                <i class="bi bi-broadcast"></i> Live Data (Yahoo Finance)
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Currency Pair</label>
+                    <select id="livePair" class="form-select">
+                        <option value="EUR/USD">EUR/USD</option>
+                        <option value="GBP/USD">GBP/USD</option>
+                        <option value="USD/JPY">USD/JPY</option>
+                        <option value="USD/CHF">USD/CHF</option>
+                        <option value="AUD/USD">AUD/USD</option>
+                        <option value="USD/CAD">USD/CAD</option>
+                        <option value="NZD/USD">NZD/USD</option>
+                        <option value="EUR/GBP">EUR/GBP</option>
+                        <option value="EUR/JPY">EUR/JPY</option>
+                        <option value="GBP/JPY">GBP/JPY</option>
+                        <option value="XAU/USD">XAU/USD (Gold)</option>
+                        <option value="XAG/USD">XAG/USD (Silver)</option>
+                        <option value="BTC/USD">BTC/USD (Bitcoin)</option>
+                        <option value="ETH/USD">ETH/USD (Ethereum)</option>
+                    </select>
+                </div>
+                <div class="row">
+                    <div class="col-6">
+                        <label class="form-label">Period</label>
+                        <select id="period" class="form-select">
+                            <option value="1d">1 Day</option>
+                            <option value="5d">5 Days</option>
+                            <option value="1mo" selected>1 Month</option>
+                            <option value="3mo">3 Months</option>
+                            <option value="6mo">6 Months</option>
+                            <option value="1y">1 Year</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Interval</label>
+                        <select id="interval" class="form-select">
+                            <option value="5m">5 Minutes</option>
+                            <option value="15m">15 Minutes</option>
+                            <option value="30m">30 Minutes</option>
+                            <option value="1h" selected>1 Hour</option>
+                            <option value="1d">1 Day</option>
+                        </select>
+                    </div>
+                </div>
+                <button id="fetchLiveBtn" class="btn btn-success w-100 mt-3">
+                    <i class="bi bi-cloud-download"></i> Fetch Live Data & Analyze
+                </button>
+                <div id="loadingSpinner" class="text-center mt-2 d-none">
+                    <div class="spinner-border text-success" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-muted small">Fetching data from Yahoo Finance...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manual Data Card -->
+        <div class="card mb-3">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-input-cursor"></i> Manual Price Input
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Price Data (comma-separated)</label>
+                    <textarea id="pricesInput" class="form-control" rows="3" 
+                        placeholder="Enter prices: 1.1050, 1.1055, 1.1048..."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Or Demo Data (Base Price)</label>
+                    <input type="number" id="basePrice" class="form-control" value="1.1000" step="0.0001">
+                </div>
+                <button id="analyzeBtn" class="btn btn-primary w-100">
+                    <i class="bi bi-cpu"></i> Analyze Manual Data
+                </button>
+            </div>
+        </div>
+
+        <!-- Indicators Reference -->
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-info-circle"></i> Indicator Guide
+            </div>
+            <div class="card-body small">
+                <p><strong>RSI:</strong> >70 Overbought (Sell), <30 Oversold (Buy)</p>
+                <p><strong>MACD:</strong> Above Signal = Bullish, Below = Bearish</p>
+                <p class="mb-0"><strong>Bollinger:</strong> Upper band = Sell, Lower = Buy</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="col-md-7">
+        <!-- Data Info -->
+        <div id="dataInfo" class="alert alert-info d-none">
+            <strong id="pairInfo">EUR/USD</strong> | 
+            <span id="dataPoints">0</span> data points | 
+            Period: <span id="periodInfo">1mo</span> | 
+            Interval: <span id="intervalInfo">1h</span>
+        </div>
+
+        <!-- Signal Card -->
+        <div class="card mb-3">
+            <div class="card-header bg-secondary text-white">
+                <i class="bi bi-lightning"></i> Trading Signal
+            </div>
+            <div class="card-body text-center">
+                <h1 id="signalText" class="display-4 text-muted">--</h1>
+                <div class="progress mb-3" style="height: 25px;">
+                    <div id="signalStrength" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
+                </div>
+                <p id="signalMessage" class="text-muted">Click "Fetch Live Data" to analyze</p>
+            </div>
+        </div>
+
+        <!-- Indicators Values -->
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white">
+                <i class="bi bi-speedometer2"></i> Indicator Values
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-sm">
+                            <tr><td><strong>Current Price</strong></td><td id="currentPrice">--</td></tr>
+                            <tr><td><strong>SMA (20)</strong></td><td id="sma20">--</td></tr>
+                            <tr><td><strong>EMA (12)</strong></td><td id="ema12">--</td></tr>
+                            <tr><td><strong>RSI (14)</strong></td><td id="rsi">--</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-sm">
+                            <tr><td><strong>MACD</strong></td><td id="macd">--</td></tr>
+                            <tr><td><strong>MACD Signal</strong></td><td id="macdSignal">--</td></tr>
+                            <tr><td><strong>BB Upper</strong></td><td id="bbUpper">--</td></tr>
+                            <tr><td><strong>BB Lower</strong></td><td id="bbLower">--</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RSI Gauge -->
+        <div class="card mb-3">
+            <div class="card-header bg-warning">
+                <i class="bi bi-speedometer"></i> RSI Gauge
+            </div>
+            <div class="card-body">
+                <div class="position-relative" style="height: 40px;">
+                    <div class="d-flex h-100">
+                        <div class="bg-success flex-fill" style="opacity: 0.3;"></div>
+                        <div class="bg-secondary flex-fill" style="opacity: 0.3;"></div>
+                        <div class="bg-danger flex-fill" style="opacity: 0.3;"></div>
+                    </div>
+                    <div id="rsiMarker" class="position-absolute" style="top: 0; left: 50%; transform: translateX(-50%); width: 4px; height: 100%; background: #000;"></div>
+                </div>
+                <div class="d-flex justify-content-between mt-1">
+                    <small class="text-success">0 (Oversold)</small>
+                    <small>30</small>
+                    <small>50</small>
+                    <small>70</small>
+                    <small class="text-danger">100 (Overbought)</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analysis Details -->
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-list-check"></i> Detailed Analysis
+            </div>
+            <div class="card-body">
+                <ul id="analysisList" class="list-group list-group-flush">
+                    <li class="list-group-item text-muted">Analysis will appear here...</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Price Chart -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-graph-up"></i> Price Chart with Indicators
+            </div>
+            <div class="card-body">
+                <canvas id="priceChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let priceChart = null;
+
+// Fetch Live Data
+document.getElementById('fetchLiveBtn').addEventListener('click', function() {
+    const pair = document.getElementById('livePair').value;
+    const period = document.getElementById('period').value;
+    const interval = document.getElementById('interval').value;
+    
+    document.getElementById('loadingSpinner').classList.remove('d-none');
+    this.disabled = true;
+    
+    fetch('/analyze_live', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pair, period, interval })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loadingSpinner').classList.add('d-none');
+        document.getElementById('fetchLiveBtn').disabled = false;
+        
+        if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+        }
+        
+        // Show data info
+        document.getElementById('dataInfo').classList.remove('d-none');
+        document.getElementById('pairInfo').textContent = data.pair;
+        document.getElementById('dataPoints').textContent = data.data_points;
+        document.getElementById('periodInfo').textContent = data.period;
+        document.getElementById('intervalInfo').textContent = data.interval;
+        
+        updateResults(data);
+    })
+    .catch(error => {
+        document.getElementById('loadingSpinner').classList.add('d-none');
+        document.getElementById('fetchLiveBtn').disabled = false;
+        alert('Error fetching data: ' + error);
+    });
+});
+
+// Manual Analysis
+document.getElementById('analyzeBtn').addEventListener('click', function() {
+    const prices = document.getElementById('pricesInput').value;
+    const basePrice = parseFloat(document.getElementById('basePrice').value);
+    
+    fetch('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prices, base_price: basePrice })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        document.getElementById('dataInfo').classList.add('d-none');
+        updateResults(data);
+    })
+    .catch(error => alert('Analysis failed: ' + error));
+});
+
+function updateResults(data) {
+    // Update signal
+    const signalText = document.getElementById('signalText');
+    signalText.textContent = data.signal;
+    signalText.className = 'display-4 ' + getSignalClass(data.signal);
+    
+    const strengthBar = document.getElementById('signalStrength');
+    strengthBar.style.width = data.strength + '%';
+    strengthBar.textContent = data.strength + '%';
+    strengthBar.className = 'progress-bar ' + getBarClass(data.signal);
+    
+    document.getElementById('signalMessage').textContent = data.message;
+    
+    // Update indicators
+    const ind = data.indicators;
+    document.getElementById('currentPrice').textContent = ind.current_price?.toFixed(5) || '--';
+    document.getElementById('sma20').textContent = ind.sma_20?.toFixed(5) || '--';
+    document.getElementById('ema12').textContent = ind.ema_12?.toFixed(5) || '--';
+    document.getElementById('rsi').textContent = ind.rsi?.toFixed(2) || '--';
+    document.getElementById('macd').textContent = ind.macd?.toFixed(5) || '--';
+    document.getElementById('macdSignal').textContent = ind.macd_signal?.toFixed(5) || '--';
+    document.getElementById('bbUpper').textContent = ind.bollinger_upper?.toFixed(5) || '--';
+    document.getElementById('bbLower').textContent = ind.bollinger_lower?.toFixed(5) || '--';
+    
+    // Update RSI gauge
+    if (ind.rsi) {
+        document.getElementById('rsiMarker').style.left = ind.rsi + '%';
+    }
+    
+    // Update analysis list
+    const analysisList = document.getElementById('analysisList');
+    analysisList.innerHTML = '';
+    if (data.analysis && data.analysis.length > 0) {
+        data.analysis.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item';
+            if (item.includes('Bullish') || item.includes('Buy')) {
+                li.innerHTML = '<i class="bi bi-arrow-up-circle text-success"></i> ' + item;
+            } else if (item.includes('Bearish') || item.includes('Sell')) {
+                li.innerHTML = '<i class="bi bi-arrow-down-circle text-danger"></i> ' + item;
+            } else {
+                li.innerHTML = '<i class="bi bi-dash-circle text-secondary"></i> ' + item;
+            }
+            analysisList.appendChild(li);
+        });
+    }
+    
+    // Update chart
+    updateChart(data.prices, ind, data.dates);
+}
+
+function getSignalClass(signal) {
+    if (signal === 'BUY') return 'text-success';
+    if (signal === 'SELL') return 'text-danger';
+    return 'text-warning';
+}
+
+function getBarClass(signal) {
+    if (signal === 'BUY') return 'bg-success';
+    if (signal === 'SELL') return 'bg-danger';
+    return 'bg-warning';
+}
+
+function updateChart(prices, indicators, dates) {
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    
+    if (priceChart) priceChart.destroy();
+    
+    const labels = dates || prices.map((_, i) => i + 1);
+    
+    // SMA line
+    const smaLine = prices.map((_, i) => {
+        if (i < 19) return null;
+        return prices.slice(i - 19, i + 1).reduce((a, b) => a + b, 0) / 20;
+    });
+    
+    // Bollinger Bands
+    const upperBand = [], lowerBand = [];
+    for (let i = 0; i < prices.length; i++) {
+        if (i < 19) { upperBand.push(null); lowerBand.push(null); continue; }
+        const slice = prices.slice(i - 19, i + 1);
+        const sma = slice.reduce((a, b) => a + b, 0) / 20;
+        const std = Math.sqrt(slice.map(p => Math.pow(p - sma, 2)).reduce((a, b) => a + b, 0) / 20);
+        upperBand.push(sma + (2 * std));
+        lowerBand.push(sma - (2 * std));
+    }
+    
+    priceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                { label: 'Price', data: prices, borderColor: '#0d6efd', borderWidth: 2, fill: false, tension: 0.1, pointRadius: 0 },
+                { label: 'SMA (20)', data: smaLine, borderColor: '#fd7e14', borderWidth: 2, borderDash: [5, 5], fill: false, pointRadius: 0 },
+                { label: 'Upper BB', data: upperBand, borderColor: 'rgba(220, 53, 69, 0.5)', borderWidth: 1, fill: false, pointRadius: 0 },
+                { label: 'Lower BB', data: lowerBand, borderColor: 'rgba(25, 135, 84, 0.5)', borderWidth: 1, fill: false, pointRadius: 0 }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'top' } },
+            scales: { 
+                y: { beginAtZero: false },
+                x: { display: true, ticks: { maxTicksLimit: 10 } }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

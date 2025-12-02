@@ -1,0 +1,377 @@
+{% extends 'base.html' %}
+
+{% block title %}ML Prediction - Forex Risk Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <h2><i class="bi bi-robot"></i> ML Entry/TP/SL Predictor</h2>
+        <p class="text-muted">AI-powered trade setup predictions using technical analysis and pattern recognition</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Settings Sidebar -->
+    <div class="col-md-3">
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-gear"></i> Settings
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Pair</label>
+                    <select id="pair" class="form-select">
+                        <optgroup label="Major Pairs">
+                            <option value="EUR/USD" selected>EUR/USD</option>
+                            <option value="GBP/USD">GBP/USD</option>
+                            <option value="USD/JPY">USD/JPY</option>
+                            <option value="USD/CHF">USD/CHF</option>
+                            <option value="AUD/USD">AUD/USD</option>
+                            <option value="USD/CAD">USD/CAD</option>
+                            <option value="NZD/USD">NZD/USD</option>
+                        </optgroup>
+                        <optgroup label="Cross Pairs">
+                            <option value="EUR/GBP">EUR/GBP</option>
+                            <option value="EUR/JPY">EUR/JPY</option>
+                            <option value="GBP/JPY">GBP/JPY</option>
+                            <option value="AUD/JPY">AUD/JPY</option>
+                        </optgroup>
+                        <optgroup label="Metals">
+                            <option value="XAU/USD">XAU/USD (Gold)</option>
+                            <option value="XAG/USD">XAG/USD (Silver)</option>
+                        </optgroup>
+                        <optgroup label="Crypto">
+                            <option value="BTC/USD">BTC/USD</option>
+                            <option value="ETH/USD">ETH/USD</option>
+                            <option value="SOL/USD">SOL/USD</option>
+                        </optgroup>
+                        <optgroup label="Indices">
+                            <option value="US30">US30 (Dow)</option>
+                            <option value="US100">US100 (Nasdaq)</option>
+                            <option value="US500">US500 (S&P)</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Period</label>
+                    <select id="period" class="form-select">
+                        <option value="5d">5 Days</option>
+                        <option value="1mo" selected>1 Month</option>
+                        <option value="3mo">3 Months</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Timeframe</label>
+                    <select id="interval" class="form-select">
+                        <option value="15m">15 Minutes</option>
+                        <option value="30m">30 Minutes</option>
+                        <option value="1h" selected>1 Hour</option>
+                        <option value="4h">4 Hours</option>
+                        <option value="1d">1 Day</option>
+                    </select>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Balance ($)</label>
+                        <input type="number" id="balance" class="form-control" value="10000">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Risk %</label>
+                        <input type="number" id="risk" class="form-control" value="1" step="0.5" min="0.5" max="5">
+                    </div>
+                </div>
+                <button id="analyzeBtn" class="btn btn-primary w-100 mb-2">
+                    <i class="bi bi-cpu"></i> Run ML Analysis
+                </button>
+                <div id="loading" class="text-center mt-2 d-none">
+                    <div class="spinner-border spinner-border-sm"></div> Analyzing...
+                </div>
+            </div>
+        </div>
+
+        <!-- Trend Score -->
+        <div class="card mb-3">
+            <div class="card-header bg-secondary text-white">
+                <i class="bi bi-speedometer2"></i> Trend Score
+            </div>
+            <div class="card-body text-center">
+                <h1 id="trendScore" class="display-2 mb-0">--</h1>
+                <small class="text-muted">(-100 to +100)</small>
+                <div id="trendDirection" class="h5 mt-2 mb-0">--</div>
+            </div>
+        </div>
+
+        <!-- Technical Features -->
+        <div class="card mb-3" id="featuresCard" style="display: none;">
+            <div class="card-header bg-info text-white">
+                <i class="bi bi-graph-up"></i> Technical Features
+            </div>
+            <div class="card-body p-2">
+                <table class="table table-sm mb-0 small">
+                    <tbody id="featuresTable"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="col-md-9">
+        <!-- Chart -->
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-graph-up"></i> Candlestick Chart
+            </div>
+            <div class="card-body p-0" style="height: 450px;">
+                <div id="chart" style="width: 100%; height: 100%;"></div>
+            </div>
+        </div>
+
+        <!-- Trade Predictions -->
+        <div class="card mb-3" id="predictionsCard" style="display: none;">
+            <div class="card-header bg-success text-white">
+                <i class="bi bi-bullseye"></i> ML Trade Predictions
+            </div>
+            <div class="card-body" id="predictions"></div>
+        </div>
+
+        <!-- Analysis -->
+        <div class="card mb-3" id="analysisCard" style="display: none;">
+            <div class="card-header bg-warning">
+                <i class="bi bi-chat-text"></i> Analysis Summary
+            </div>
+            <div class="card-body">
+                <ul id="analysisList" class="list-group list-group-flush"></ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="error" class="alert alert-danger mt-3" style="display: none;"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+let chart = null;
+let candleSeries = null;
+
+document.getElementById('analyzeBtn').addEventListener('click', runAnalysis);
+
+async function runAnalysis() {
+    const pair = document.getElementById('pair').value;
+    const period = document.getElementById('period').value;
+    const interval = document.getElementById('interval').value;
+    const balance = parseFloat(document.getElementById('balance').value);
+    const risk = parseFloat(document.getElementById('risk').value);
+    
+    document.getElementById('loading').classList.remove('d-none');
+    document.getElementById('analyzeBtn').disabled = true;
+    document.getElementById('error').style.display = 'none';
+    
+    try {
+        const response = await fetch('/analyze_ml', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pair, period, interval, balance, risk_percent: risk })
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        displayResults(data);
+    } catch (err) {
+        document.getElementById('error').textContent = err.message;
+        document.getElementById('error').style.display = 'block';
+    } finally {
+        document.getElementById('loading').classList.add('d-none');
+        document.getElementById('analyzeBtn').disabled = false;
+    }
+}
+
+function displayResults(data) {
+    // Trend Score
+    const trendScore = data.features.trend_score;
+    const trendEl = document.getElementById('trendScore');
+    trendEl.textContent = trendScore;
+    
+    const trendDir = document.getElementById('trendDirection');
+    if (trendScore >= 30) {
+        trendDir.innerHTML = '<span class="text-success"><i class="bi bi-arrow-up-circle-fill"></i> BULLISH</span>';
+        trendEl.className = 'display-2 mb-0 text-success';
+    } else if (trendScore <= -30) {
+        trendDir.innerHTML = '<span class="text-danger"><i class="bi bi-arrow-down-circle-fill"></i> BEARISH</span>';
+        trendEl.className = 'display-2 mb-0 text-danger';
+    } else {
+        trendDir.innerHTML = '<span class="text-warning"><i class="bi bi-dash-circle-fill"></i> NEUTRAL</span>';
+        trendEl.className = 'display-2 mb-0 text-warning';
+    }
+    
+    // Features Table
+    const f = data.features;
+    document.getElementById('featuresTable').innerHTML = `
+        <tr><td>Current Price</td><td class="text-end fw-bold">${f.current_price}</td></tr>
+        <tr><td>RSI (14)</td><td class="text-end ${f.rsi > 70 ? 'text-danger' : f.rsi < 30 ? 'text-success' : ''}">${f.rsi || '--'}</td></tr>
+        <tr><td>MACD</td><td class="text-end">${f.macd ? f.macd.toFixed(5) : '--'}</td></tr>
+        <tr><td>SMA 20</td><td class="text-end">${f.sma_20 ? f.sma_20.toFixed(5) : '--'}</td></tr>
+        <tr><td>SMA 50</td><td class="text-end">${f.sma_50 ? f.sma_50.toFixed(5) : '--'}</td></tr>
+        <tr><td>BB Position</td><td class="text-end">${f.bb_position}%</td></tr>
+        <tr><td>ATR</td><td class="text-end">${f.atr}</td></tr>
+        <tr><td>Volatility</td><td class="text-end">${f.volatility}%</td></tr>
+        <tr><td>Support</td><td class="text-end text-success">${f.support ? f.support.toFixed(5) : '--'}</td></tr>
+        <tr><td>Resistance</td><td class="text-end text-danger">${f.resistance ? f.resistance.toFixed(5) : '--'}</td></tr>
+    `;
+    document.getElementById('featuresCard').style.display = 'block';
+    
+    // Predictions
+    const predictionsDiv = document.getElementById('predictions');
+    predictionsDiv.innerHTML = '';
+    
+    data.predictions.forEach((pred, idx) => {
+        if (pred.direction !== 'WAIT') {
+            const bgClass = pred.direction === 'BUY' ? 'border-success bg-success bg-opacity-10' : 'border-danger bg-danger bg-opacity-10';
+            predictionsDiv.innerHTML += `
+                <div class="border rounded p-3 mb-2 ${bgClass}">
+                    <div class="row align-items-center">
+                        <div class="col-md-2 text-center">
+                            <span class="badge fs-5 ${pred.direction === 'BUY' ? 'bg-success' : 'bg-danger'}">${pred.direction}</span>
+                            <div class="mt-2"><strong>${pred.risk_reward}R</strong></div>
+                            <small class="text-muted">${pred.confidence}% conf</small>
+                        </div>
+                        <div class="col-md-4">
+                            <table class="table table-sm mb-0">
+                                <tr><td>Entry:</td><td><strong class="text-primary">${pred.entry}</strong></td></tr>
+                                <tr><td>Stop Loss:</td><td><strong class="text-danger">${pred.stop_loss}</strong></td></tr>
+                                <tr><td>Take Profit:</td><td><strong class="text-success">${pred.take_profit}</strong></td></tr>
+                            </table>
+                        </div>
+                        <div class="col-md-3">
+                            <table class="table table-sm mb-0">
+                                <tr><td>Lots:</td><td><strong>${pred.lots}</strong></td></tr>
+                                <tr><td>Risk:</td><td><strong>$${pred.risk_amount}</strong></td></tr>
+                            </table>
+                        </div>
+                        <div class="col-md-3">
+                            <p class="mb-0 small">${pred.reason}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            predictionsDiv.innerHTML += `
+                <div class="alert alert-warning mb-0">
+                    <i class="bi bi-pause-circle"></i> <strong>WAIT</strong> - ${pred.reason}
+                </div>
+            `;
+        }
+    });
+    document.getElementById('predictionsCard').style.display = 'block';
+    
+    // Analysis
+    const analysisList = document.getElementById('analysisList');
+    analysisList.innerHTML = '';
+    data.analysis.forEach(item => {
+        analysisList.innerHTML += `<li class="list-group-item"><i class="bi bi-check-circle text-primary"></i> ${item}</li>`;
+    });
+    document.getElementById('analysisCard').style.display = 'block';
+    
+    // Chart
+    drawChart(data);
+}
+
+function drawChart(data) {
+    const container = document.getElementById('chart');
+    container.innerHTML = '';
+    
+    chart = LightweightCharts.createChart(container, {
+        width: container.clientWidth,
+        height: container.clientHeight,
+        layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
+        grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
+        rightPriceScale: { borderColor: '#2a2e39' },
+        timeScale: { borderColor: '#2a2e39', timeVisible: true }
+    });
+    
+    candleSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a', downColor: '#ef5350',
+        borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+        wickUpColor: '#26a69a', wickDownColor: '#ef5350'
+    });
+    
+    const candles = data.ohlc.closes.map((_, i) => ({
+        time: Math.floor(new Date(data.dates[i]).getTime() / 1000),
+        open: data.ohlc.opens[i],
+        high: data.ohlc.highs[i],
+        low: data.ohlc.lows[i],
+        close: data.ohlc.closes[i]
+    }));
+    candleSeries.setData(candles);
+    
+    // Support/Resistance lines
+    if (data.features.support) {
+        candleSeries.createPriceLine({
+            price: data.features.support,
+            color: '#26a69a',
+            lineWidth: 1,
+            lineStyle: 2,
+            title: 'Support'
+        });
+    }
+    if (data.features.resistance) {
+        candleSeries.createPriceLine({
+            price: data.features.resistance,
+            color: '#ef5350',
+            lineWidth: 1,
+            lineStyle: 2,
+            title: 'Resistance'
+        });
+    }
+    
+    // SMA lines
+    if (data.features.sma_20) {
+        candleSeries.createPriceLine({
+            price: data.features.sma_20,
+            color: '#ff9800',
+            lineWidth: 1,
+            lineStyle: 0,
+            title: 'SMA20'
+        });
+    }
+    
+    // Trade prediction lines
+    const pred = data.predictions[0];
+    if (pred && pred.direction !== 'WAIT') {
+        candleSeries.createPriceLine({
+            price: pred.entry,
+            color: '#2196f3',
+            lineWidth: 2,
+            lineStyle: 2,
+            title: 'Entry'
+        });
+        candleSeries.createPriceLine({
+            price: pred.stop_loss,
+            color: '#f44336',
+            lineWidth: 2,
+            lineStyle: 2,
+            title: 'SL'
+        });
+        candleSeries.createPriceLine({
+            price: pred.take_profit,
+            color: '#4caf50',
+            lineWidth: 2,
+            lineStyle: 2,
+            title: 'TP'
+        });
+    }
+    
+    chart.timeScale().fitContent();
+    
+    // Handle resize
+    window.addEventListener('resize', () => {
+        chart.applyOptions({ width: container.clientWidth });
+    });
+}
+</script>
+{% endblock %}
