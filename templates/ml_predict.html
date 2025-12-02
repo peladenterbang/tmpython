@@ -91,7 +91,7 @@
 
         <!-- Trend Score -->
         <div class="card mb-3">
-            <div class="card-header bg-secondary text-white">
+            <div class="card-header">
                 <i class="bi bi-speedometer2"></i> Trend Score
             </div>
             <div class="card-body text-center">
@@ -103,7 +103,7 @@
 
         <!-- Technical Features -->
         <div class="card mb-3" id="featuresCard" style="display: none;">
-            <div class="card-header bg-info text-white">
+            <div class="card-header">
                 <i class="bi bi-graph-up"></i> Technical Features
             </div>
             <div class="card-body p-2">
@@ -128,7 +128,7 @@
 
         <!-- Trade Predictions -->
         <div class="card mb-3" id="predictionsCard" style="display: none;">
-            <div class="card-header bg-success text-white">
+            <div class="card-header">
                 <i class="bi bi-bullseye"></i> ML Trade Predictions
             </div>
             <div class="card-body" id="predictions"></div>
@@ -136,7 +136,7 @@
 
         <!-- Analysis -->
         <div class="card mb-3" id="analysisCard" style="display: none;">
-            <div class="card-header bg-warning">
+            <div class="card-header">
                 <i class="bi bi-chat-text"></i> Analysis Summary
             </div>
             <div class="card-body">
@@ -231,12 +231,13 @@ function displayResults(data) {
     
     data.predictions.forEach((pred, idx) => {
         if (pred.direction !== 'WAIT') {
-            const bgClass = pred.direction === 'BUY' ? 'border-success bg-success bg-opacity-10' : 'border-danger bg-danger bg-opacity-10';
+            const signalClass = pred.direction === 'BUY' ? 'signal-buy' : 'signal-sell';
+            const badgeClass = pred.direction === 'BUY' ? 'badge-soft-success' : 'badge-soft-danger';
             predictionsDiv.innerHTML += `
-                <div class="border rounded p-3 mb-2 ${bgClass}">
+                <div class="p-3 mb-2 ${signalClass}">
                     <div class="row align-items-center">
                         <div class="col-md-2 text-center">
-                            <span class="badge fs-5 ${pred.direction === 'BUY' ? 'bg-success' : 'bg-danger'}">${pred.direction}</span>
+                            <span class="badge fs-6 ${badgeClass}">${pred.direction}</span>
                             <div class="mt-2"><strong>${pred.risk_reward}R</strong></div>
                             <small class="text-muted">${pred.confidence}% conf</small>
                         </div>

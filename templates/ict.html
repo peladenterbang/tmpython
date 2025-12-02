@@ -70,7 +70,7 @@
 
         <!-- Lot Calculator -->
         <div class="card mb-3">
-            <div class="card-header bg-success text-white">
+            <div class="card-header">
                 <i class="bi bi-calculator"></i> Lot Calculator
             </div>
             <div class="card-body">
@@ -193,7 +193,7 @@
 
         <!-- Trade Setup -->
         <div class="card mb-3">
-            <div class="card-header bg-success text-white">
+            <div class="card-header">
                 <i class="bi bi-bullseye"></i> Trade Setup (Auto-detected)
             </div>
             <div class="card-body" id="tradeSetup">
@@ -205,7 +205,7 @@
         <div class="row mb-3">
             <div class="col-md-6">
                 <div class="card h-100">
-                    <div class="card-header bg-warning">
+                    <div class="card-header">
                         <i class="bi bi-box"></i> Order Blocks
                     </div>
                     <div class="card-body" id="orderBlocks">
@@ -215,7 +215,7 @@
             </div>
             <div class="col-md-6">
                 <div class="card h-100">
-                    <div class="card-header bg-info text-white">
+                    <div class="card-header">
                         <i class="bi bi-layers"></i> Fair Value Gaps
                     </div>
                     <div class="card-body" id="fvgList">
@@ -315,7 +315,7 @@ function calculateCustomTrade() {
     const direction = sl < entry ? 'BUY' : 'SELL';
     
     document.getElementById('customResult').innerHTML = `
-        <span class="badge ${direction === 'BUY' ? 'bg-success' : 'bg-danger'}">${direction}</span>
+        <span class="badge ${direction === 'BUY' ? 'badge-soft-success' : 'badge-soft-danger'}">${direction}</span>
         <strong>SL: ${slPips.toFixed(1)} pips</strong> | 
         <strong>Lots: ${lotSize.toFixed(2)}</strong> | 
         <strong>R:R: ${rr}</strong> | 
@@ -384,7 +384,7 @@ function updateUI(data) {
     if (td) {
         document.getElementById('tradingDay').innerHTML = `
             <h4>${td.day}</h4>
-            <span class="badge ${td.is_optimal ? 'bg-success' : 'bg-warning'}">${td.is_optimal ? 'OPTIMAL' : 'WAIT'}</span>
+            <span class="badge ${td.is_optimal ? 'badge-soft-success' : 'badge-soft-warning'}">${td.is_optimal ? 'OPTIMAL' : 'WAIT'}</span>
             <p class="small mb-0 mt-2">${td.message}</p>
         `;
         document.getElementById('tradingDayCard').className = td.is_optimal ? 'card mb-3 border-success' : 'card mb-3 border-warning';
@@ -394,10 +394,10 @@ function updateUI(data) {
     const setupDiv = document.getElementById('tradeSetup');
     if (data.trade_setups && data.trade_setups.length > 0) {
         setupDiv.innerHTML = data.trade_setups.map(s => `
-            <div class="border rounded p-3 mb-2 ${s.type === 'BUY' ? 'border-success bg-success bg-opacity-10' : 'border-danger bg-danger bg-opacity-10'}">
+            <div class="p-3 mb-2 ${s.type === 'BUY' ? 'signal-buy' : 'signal-sell'}">
                 <div class="row align-items-center">
                     <div class="col-md-2 text-center">
-                        <span class="badge fs-5 ${s.type === 'BUY' ? 'bg-success' : 'bg-danger'}">${s.type}</span>
+                        <span class="badge fs-6 ${s.type === 'BUY' ? 'badge-soft-success' : 'badge-soft-danger'}">${s.type}</span>
                         <div class="mt-2"><strong>${s.risk_reward}R</strong></div>
                     </div>
                     <div class="col-md-4">
@@ -428,7 +428,7 @@ function updateUI(data) {
     if (data.order_blocks && data.order_blocks.length > 0) {
         obDiv.innerHTML = data.order_blocks.map(ob => `
             <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                <span class="badge ${ob.type === 'bullish' ? 'bg-success' : 'bg-danger'}">${ob.type.toUpperCase()}</span>
+                <span class="badge ${ob.type === 'bullish' ? 'badge-outline-success' : 'badge-outline-danger'}">${ob.type.toUpperCase()}</span>
                 <span>${ob.low?.toFixed(5)} - ${ob.high?.toFixed(5)}</span>
             </div>
         `).join('');
@@ -441,7 +441,7 @@ function updateUI(data) {
     if (data.fvg && data.fvg.length > 0) {
         fvgDiv.innerHTML = data.fvg.map(f => `
             <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                <span class="badge ${f.type === 'bullish' ? 'bg-success' : 'bg-danger'}">${f.type.toUpperCase()}</span>
+                <span class="badge ${f.type === 'bullish' ? 'badge-outline-success' : 'badge-outline-danger'}">${f.type.toUpperCase()}</span>
                 <span>${f.low?.toFixed(5)} - ${f.high?.toFixed(5)}</span>
             </div>
         `).join('');

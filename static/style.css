@@ -1,55 +1,528 @@
-/* Forex Risk Manager - Custom Styles */
+/* Forex Risk Manager - Professional Theme */
+
+:root {
+    /* Primary Blues */
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --primary-light: #eff6ff;
+    
+    /* Semantic Colors */
+    --success: #059669;
+    --success-light: #ecfdf5;
+    --danger: #dc2626;
+    --danger-light: #fef2f2;
+    --warning: #d97706;
+    --warning-light: #fffbeb;
+    --info: #0891b2;
+    --info-light: #ecfeff;
+    
+    /* Neutrals */
+    --dark: #111827;
+    --dark-secondary: #1f2937;
+    --gray-900: #111827;
+    --gray-800: #1f2937;
+    --gray-700: #374151;
+    --gray-600: #4b5563;
+    --gray-500: #6b7280;
+    --gray-400: #9ca3af;
+    --gray-300: #d1d5db;
+    --gray-200: #e5e7eb;
+    --gray-100: #f3f4f6;
+    --gray-50: #f9fafb;
+    --white: #ffffff;
+    
+    /* Borders & Backgrounds */
+    --border: #e5e7eb;
+    --bg-page: #f9fafb;
+    --bg-card: #ffffff;
+    
+    --transition: all 0.15s ease;
+}
 
 body {
-    background-color: #f8f9fa;
+    background-color: var(--bg-page);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--gray-900);
+    font-size: 14px;
+    line-height: 1.5;
 }
 
 main {
     flex: 1;
 }
 
-.navbar-brand {
-    font-weight: bold;
+/* Navbar */
+.navbar {
+    border-bottom: 1px solid var(--border);
 }
 
+.navbar-dark {
+    background: var(--gray-800) !important;
+    border-bottom: none;
+}
+
+.navbar-brand {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--white) !important;
+}
+
+.nav-link {
+    font-size: 14px;
+    padding: 0.5rem 0.875rem;
+    color: var(--gray-300) !important;
+    transition: var(--transition);
+}
+
+.nav-link:hover {
+    color: var(--white) !important;
+    background: var(--gray-700);
+}
+
+/* Cards */
 .card {
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    border: none;
+    border: 1px solid var(--border);
+    border-radius: 0;
     margin-bottom: 1rem;
+    background: var(--bg-card);
+    box-shadow: none;
+}
+
+.card:hover {
+    box-shadow: none;
+    transform: none;
 }
 
 .card-header {
     font-weight: 600;
+    font-size: 14px;
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+    background: var(--gray-50);
+    color: var(--gray-700);
 }
 
-.display-4 {
-    font-weight: bold;
+.card-header.bg-dark {
+    background: var(--gray-800) !important;
+    color: var(--white);
+}
+
+.card-header.bg-primary {
+    background: var(--primary) !important;
+    color: var(--white);
+}
+
+.card-body {
+    padding: 1rem;
+}
+
+/* Buttons */
+.btn {
+    font-weight: 500;
+    font-size: 14px;
+    border-radius: 0;
+    padding: 0.5rem 1rem;
+    transition: var(--transition);
+    border: none;
+}
+
+.btn:hover {
+    transform: none;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: var(--white);
+}
+
+.btn-primary:hover {
+    background: var(--primary-hover);
+}
+
+.btn-success {
+    background: var(--success);
+    color: var(--white);
+}
+
+.btn-success:hover {
+    background: #047857;
+}
+
+.btn-danger {
+    background: var(--danger);
+    color: var(--white);
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+}
+
+.btn-warning {
+    background: var(--warning);
+    color: var(--white);
+}
+
+.btn-warning:hover {
+    background: #b45309;
+}
+
+.btn-secondary {
+    background: var(--gray-500);
+    color: var(--white);
+}
+
+.btn-secondary:hover {
+    background: var(--gray-600);
+}
+
+.btn-dark {
+    background: var(--gray-800);
+    color: var(--white);
+}
+
+.btn-dark:hover {
+    background: var(--gray-900);
+}
+
+.btn-outline-primary {
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    background: transparent;
+}
+
+.btn-outline-primary:hover {
+    background: var(--primary);
+    color: var(--white);
+}
+
+.btn-outline-secondary {
+    border: 1px solid var(--gray-400);
+    color: var(--gray-600);
+    background: transparent;
+}
+
+.btn-outline-secondary:hover {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+    color: var(--gray-700);
+}
+
+.btn-outline-danger {
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    background: transparent;
+}
+
+.btn-outline-danger:hover {
+    background: var(--danger);
+    color: var(--white);
+}
+
+.btn-sm {
+    padding: 0.25rem 0.75rem;
+    font-size: 13px;
+}
+
+/* Form Controls */
+.form-control, .form-select {
+    border-radius: 0;
+    border: 1px solid var(--gray-300);
+    padding: 0.5rem 0.75rem;
+    font-size: 14px;
+    transition: var(--transition);
+    background: var(--white);
+    color: var(--gray-900);
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+.form-control::placeholder {
+    color: var(--gray-400);
+}
+
+.form-label {
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--gray-700);
+    margin-bottom: 0.25rem;
+}
+
+.input-group-text {
+    border-radius: 0;
+    border: 1px solid var(--gray-300);
+    background: var(--gray-50);
+    font-size: 14px;
+    color: var(--gray-600);
+}
+
+/* Tables */
+.table {
+    font-size: 14px;
+    margin-bottom: 0;
 }
 
 .table th {
     font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     white-space: nowrap;
+    background: var(--gray-50);
+    color: var(--gray-600);
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1rem;
 }
 
+.table td {
+    padding: 0.75rem 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--border);
+    color: var(--gray-700);
+}
+
+.table tbody tr:hover {
+    background: var(--gray-50);
+}
+
+.table-dark th {
+    background: var(--gray-800);
+    color: var(--gray-200);
+}
+
+/* Badges */
 .badge {
     font-weight: 500;
+    font-size: 12px;
+    padding: 0.25em 0.5em;
+    border-radius: 0;
 }
 
+.bg-success { background: var(--success) !important; color: var(--white) !important; }
+.bg-danger { background: var(--danger) !important; color: var(--white) !important; }
+.bg-warning { background: var(--warning) !important; color: var(--white) !important; }
+.bg-primary { background: var(--primary) !important; color: var(--white) !important; }
+.bg-info { background: var(--info) !important; color: var(--white) !important; }
+.bg-secondary { background: var(--gray-500) !important; color: var(--white) !important; }
+.bg-dark { background: var(--gray-800) !important; color: var(--white) !important; }
+.bg-light { background: var(--gray-100) !important; color: var(--gray-700) !important; }
+
+/* Alerts */
+.alert {
+    border-radius: 0;
+    border: none;
+    border-left: 3px solid;
+    padding: 0.75rem 1rem;
+    font-size: 14px;
+}
+
+.alert-success {
+    background: var(--success-light);
+    border-color: var(--success);
+    color: #065f46;
+}
+
+.alert-danger {
+    background: var(--danger-light);
+    border-color: var(--danger);
+    color: #991b1b;
+}
+
+.alert-warning {
+    background: var(--warning-light);
+    border-color: var(--warning);
+    color: #92400e;
+}
+
+.alert-info {
+    background: var(--info-light);
+    border-color: var(--info);
+    color: #0e7490;
+}
+
+/* Modals */
+.modal-content {
+    border-radius: 0;
+    border: none;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--border);
+    padding: 1rem;
+    background: var(--gray-50);
+}
+
+.modal-header.bg-primary {
+    background: var(--primary) !important;
+    color: var(--white);
+}
+
+.modal-header.bg-dark {
+    background: var(--gray-800) !important;
+    color: var(--white);
+}
+
+.modal-title {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.modal-body {
+    padding: 1rem;
+}
+
+.modal-footer {
+    border-top: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+    background: var(--gray-50);
+}
+
+/* Dropdowns - Override dark navbar */
+.navbar .dropdown-menu,
+.navbar-dark .dropdown-menu,
+.bg-dark .dropdown-menu,
+.dropdown-menu {
+    border-radius: 0;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    padding: 0.25rem 0;
+    background-color: #ffffff !important;
+    color: #374151 !important;
+}
+
+.navbar .dropdown-menu *,
+.navbar-dark .dropdown-menu *,
+.bg-dark .dropdown-menu *,
+.dropdown-menu * {
+    color: #374151 !important;
+}
+
+.navbar .dropdown-item,
+.navbar-dark .dropdown-item,
+.bg-dark .dropdown-item,
+.dropdown-item {
+    font-size: 14px;
+    padding: 0.5rem 1rem;
+    color: #374151 !important;
+    background-color: transparent !important;
+    transition: var(--transition);
+}
+
+.navbar .dropdown-item:hover,
+.navbar .dropdown-item:focus,
+.navbar-dark .dropdown-item:hover,
+.navbar-dark .dropdown-item:focus,
+.bg-dark .dropdown-item:hover,
+.bg-dark .dropdown-item:focus,
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background-color: #f3f4f6 !important;
+    color: #111827 !important;
+}
+
+.dropdown-item.text-danger,
+.navbar .dropdown-item.text-danger,
+.navbar-dark .dropdown-item.text-danger,
+.bg-dark .dropdown-item.text-danger {
+    color: #dc2626 !important;
+}
+
+.dropdown-item.text-danger:hover,
+.navbar .dropdown-item.text-danger:hover,
+.navbar-dark .dropdown-item.text-danger:hover,
+.bg-dark .dropdown-item.text-danger:hover {
+    background-color: #fef2f2 !important;
+    color: #dc2626 !important;
+}
+
+.dropdown-divider {
+    border-color: var(--border);
+}
+
+.dropdown-menu i {
+    color: #6b7280 !important;
+}
+
+.dropdown-item.text-danger i {
+    color: #dc2626 !important;
+}
+
+/* Display & Typography */
+.display-4 {
+    font-weight: 600;
+    font-size: 1.75rem;
+    color: var(--gray-900);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    color: var(--gray-900);
+}
+
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.125rem; }
+h4 { font-size: 1rem; }
+h5 { font-size: 0.875rem; }
+
+.text-muted { color: var(--gray-500) !important; }
+.text-success { color: var(--success) !important; }
+.text-danger { color: var(--danger) !important; }
+.text-primary { color: var(--primary) !important; }
+.text-warning { color: var(--warning) !important; }
+.text-info { color: var(--info) !important; }
+
+/* Stats Cards */
+.stat-card {
+    border-left: 3px solid;
+    background: var(--white);
+}
+
+.stat-card.primary { border-color: var(--primary); }
+.stat-card.success { border-color: var(--success); }
+.stat-card.warning { border-color: var(--warning); }
+.stat-card.danger { border-color: var(--danger); }
+
+/* Footer */
+footer {
+    background: var(--gray-800) !important;
+    color: var(--gray-400);
+    font-size: 12px;
+}
+
+/* Progress bars */
+.progress {
+    border-radius: 0;
+    height: 4px;
+    background: var(--gray-200);
+}
+
+.progress-bar {
+    border-radius: 0;
+}
+
+.progress-bar.bg-primary { background: var(--primary) !important; }
+.progress-bar.bg-success { background: var(--success) !important; }
+.progress-bar.bg-warning { background: var(--warning) !important; }
+.progress-bar.bg-danger { background: var(--danger) !important; }
+
+/* Form Range */
 .form-range::-webkit-slider-thumb {
-    background: #0d6efd;
+    background: var(--primary);
 }
 
-.btn {
-    font-weight: 500;
-}
-
-/* Dashboard cards hover effect */
-.card:hover {
-    transform: translateY(-2px);
-    transition: transform 0.2s ease;
+/* Code */
+code {
+    background: var(--gray-100);
+    color: var(--danger);
+    padding: 0.125em 0.375em;
+    border-radius: 0;
+    font-size: 13px;
 }
 
 /* Custom scrollbar */
@@ -59,35 +532,377 @@ main {
 }
 
 ::-webkit-scrollbar-track {
-    background: #f1f1f1;
+    background: var(--gray-100);
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 4px;
+    background: var(--gray-300);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #555;
+    background: var(--gray-400);
 }
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .display-4 {
-        font-size: 2rem;
+        font-size: 1.5rem;
     }
     
     .card-body h3 {
-        font-size: 1.5rem;
+        font-size: 1rem;
     }
 }
 
-/* Animation for result update */
-@keyframes highlight {
-    0% { background-color: #ffc107; }
-    100% { background-color: transparent; }
+/* Profit/Loss colors */
+.profit { color: var(--success); font-weight: 500; }
+.loss { color: var(--danger); font-weight: 500; }
+
+/* Card variants */
+.card-success { border-left: 3px solid var(--success); }
+.card-danger { border-left: 3px solid var(--danger); }
+.card-warning { border-left: 3px solid var(--warning); }
+.card-primary { border-left: 3px solid var(--primary); }
+
+/* Focus states */
+*:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
 }
 
-.highlight {
-    animation: highlight 1s ease;
+.form-control:focus,
+.form-select:focus {
+    outline: none;
+}
+
+.btn:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+    box-shadow: none;
+}
+
+/* Link styles */
+a {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--primary-hover);
+    text-decoration: underline;
+}
+
+/* Small text helper */
+.small, small {
+    font-size: 12px;
+    color: var(--gray-500);
+}
+
+/* Dividers */
+hr {
+    border-color: var(--border);
+    opacity: 1;
+}
+
+/* List groups */
+.list-group-item {
+    border-color: var(--border);
+    padding: 0.75rem 1rem;
+    color: var(--gray-700);
+}
+
+.list-group-item:hover {
+    background: var(--gray-50);
+}
+
+/* Nav tabs */
+.nav-tabs {
+    border-color: var(--border);
+}
+
+.nav-tabs .nav-link {
+    border-radius: 0;
+    color: var(--gray-600);
+}
+
+.nav-tabs .nav-link:hover {
+    border-color: var(--gray-200);
+}
+
+.nav-tabs .nav-link.active {
+    border-color: var(--border);
+    border-bottom-color: var(--white);
+    color: var(--primary);
+}
+
+/* ============================================
+   TRADE SIGNALS & STATUS INDICATORS
+   Using border style instead of solid colors
+   ============================================ */
+
+/* Signal badges - outline style */
+.badge-outline-success {
+    background: transparent;
+    border: 1px solid var(--success);
+    color: var(--success);
+}
+
+.badge-outline-danger {
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+}
+
+.badge-outline-warning {
+    background: transparent;
+    border: 1px solid var(--warning);
+    color: var(--warning);
+}
+
+.badge-outline-primary {
+    background: transparent;
+    border: 1px solid var(--primary);
+    color: var(--primary);
+}
+
+.badge-outline-info {
+    background: transparent;
+    border: 1px solid var(--info);
+    color: var(--info);
+}
+
+/* Soft/Light badges - subtle background */
+.badge-soft-success {
+    background: var(--success-light);
+    color: var(--success);
+    border: 1px solid var(--success);
+}
+
+.badge-soft-danger {
+    background: var(--danger-light);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+}
+
+.badge-soft-warning {
+    background: var(--warning-light);
+    color: #92400e;
+    border: 1px solid var(--warning);
+}
+
+.badge-soft-primary {
+    background: var(--primary-light);
+    color: var(--primary);
+    border: 1px solid var(--primary);
+}
+
+.badge-soft-info {
+    background: var(--info-light);
+    color: var(--info);
+    border: 1px solid var(--info);
+}
+
+/* Trade signal cards - border only */
+.signal-buy {
+    border-left: 3px solid var(--success) !important;
+    background: var(--white);
+}
+
+.signal-sell {
+    border-left: 3px solid var(--danger) !important;
+    background: var(--white);
+}
+
+.signal-neutral {
+    border-left: 3px solid var(--gray-400) !important;
+    background: var(--white);
+}
+
+/* Trade type indicators */
+.trade-buy {
+    color: var(--success);
+    font-weight: 600;
+}
+
+.trade-sell {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+/* Status indicators with better contrast */
+.status-open {
+    background: var(--primary-light);
+    color: var(--primary);
+    border: 1px solid var(--primary);
+    padding: 0.25em 0.5em;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-closed {
+    background: var(--gray-100);
+    color: var(--gray-600);
+    border: 1px solid var(--gray-300);
+    padding: 0.25em 0.5em;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-pending {
+    background: var(--warning-light);
+    color: #92400e;
+    border: 1px solid var(--warning);
+    padding: 0.25em 0.5em;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-completed {
+    background: var(--success-light);
+    color: var(--success);
+    border: 1px solid var(--success);
+    padding: 0.25em 0.5em;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-failed {
+    background: var(--danger-light);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    padding: 0.25em 0.5em;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* ICT Bias indicators */
+.bias-bullish {
+    color: var(--success);
+    font-weight: 600;
+}
+
+.bias-bearish {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.bias-neutral {
+    color: var(--gray-500);
+    font-weight: 600;
+}
+
+/* Level indicators - subtle */
+.level-pwh {
+    border-left: 3px solid var(--success);
+    padding-left: 0.5rem;
+    color: var(--gray-700);
+}
+
+.level-pwl {
+    border-left: 3px solid var(--danger);
+    padding-left: 0.5rem;
+    color: var(--gray-700);
+}
+
+/* Risk indicators */
+.risk-low {
+    color: var(--success);
+}
+
+.risk-medium {
+    color: var(--warning);
+}
+
+.risk-high {
+    color: var(--danger);
+}
+
+/* Fix text contrast issues */
+.text-light {
+    color: var(--gray-100) !important;
+}
+
+.text-dark {
+    color: var(--gray-900) !important;
+}
+
+.text-secondary {
+    color: var(--gray-600) !important;
+}
+
+/* Ensure white text on dark backgrounds */
+.bg-dark, 
+.bg-primary, 
+.bg-success, 
+.bg-danger, 
+.bg-warning,
+.bg-info,
+.bg-secondary {
+    color: var(--white) !important;
+}
+
+.bg-dark a,
+.bg-primary a,
+.bg-success a,
+.bg-danger a {
+    color: var(--white) !important;
+}
+
+/* Card header text always readable */
+.card-header.bg-dark *,
+.card-header.bg-primary * {
+    color: var(--white);
+}
+
+/* Better contrast for muted text */
+.text-muted {
+    color: var(--gray-600) !important;
+}
+
+/* Ensure table text is readable */
+.table {
+    color: var(--gray-800);
+}
+
+.table td {
+    color: var(--gray-800);
+}
+
+/* Input and select text */
+.form-control,
+.form-select {
+    color: var(--gray-900);
+}
+
+/* Dropdown text */
+.dropdown-menu {
+    color: var(--gray-800);
+}
+
+/* Modal body text */
+.modal-body {
+    color: var(--gray-800);
+}
+
+/* Alert text always dark for readability */
+.alert {
+    color: var(--gray-800);
+}
+
+.alert-success { color: #065f46; }
+.alert-danger { color: #991b1b; }
+.alert-warning { color: #92400e; }
+.alert-info { color: #0e7490; }
+
+/* Footer text */
+footer, footer * {
+    color: var(--gray-300) !important;
+}
+
+footer a {
+    color: var(--gray-200) !important;
+}
+
+footer a:hover {
+    color: var(--white) !important;
 }
