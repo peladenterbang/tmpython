@@ -37,8 +37,19 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('trades') }}"><i class="bi bi-list-ul"></i> All Trades</a>
                     </li>
-                    <li class="nav-item ms-2">
-                        <a class="nav-link text-danger" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a>
+                    <li class="nav-item dropdown ms-2">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle"></i> {{ session.get('user_name', 'User') }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{{ url_for('profile') }}"><i class="bi bi-person"></i> Profile</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('subscription') }}"><i class="bi bi-star"></i> Subscription</a></li>
+                            {% if session.get('is_admin') %}
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('admin_dashboard') }}"><i class="bi bi-shield-lock"></i> Admin Panel</a></li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
+                        </ul>
                     </li>
                 </ul>
             </div>

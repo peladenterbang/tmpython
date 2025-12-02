@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+
+{% block title %}Subscription Plans - Forex Risk Manager{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="text-center mb-5">
+        <h2><i class="bi bi-star"></i> Subscription Plans</h2>
+        <p class="text-muted">Choose the plan that fits your trading needs</p>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <!-- Current Plan Badge -->
+        <div class="mb-4">
+            <span class="badge bg-primary fs-6 px-4 py-2">
+                Current Plan: {{ (user['subscription_plan'] or 'free')|title }}
+                {% if user['subscription_expires'] %}
+                    (Expires: {{ user['subscription_expires'][:10] }})
+                {% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="row justify-content-center">
+        <!-- Free Plan -->
+        <div class="col-md-3 mb-4">
+            <div class="card h-100 {% if user['subscription_plan'] == 'free' or not user['subscription_plan'] %}border-primary{% endif %}">
+                <div class="card-header text-center bg-light">
+                    <h4 class="my-0">Free</h4>
+                </div>
+                <div class="card-body text-center">
+                    <h1 class="card-title">$0<small class="text-muted fw-light">/forever</small></h1>
+                    <ul class="list-unstyled mt-3 mb-4 text-start">
+                        <li class="py-1"><i class="bi bi-check text-success"></i> Dashboard</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> Calculator</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> 5 trades/month</li>
+                        <li class="py-1 text-muted"><i class="bi bi-x"></i> ICT Analysis</li>
+                        <li class="py-1 text-muted"><i class="bi bi-x"></i> ML Predictions</li>
+                    </ul>
+                    {% if user['subscription_plan'] == 'free' or not user['subscription_plan'] %}
+                    <button class="btn btn-outline-secondary w-100" disabled>Current Plan</button>
+                    {% else %}
+                    <span class="text-muted">Basic features included</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Basic Plan -->
+        <div class="col-md-3 mb-4">
+            <div class="card h-100 {% if user['subscription_plan'] == 'basic' %}border-primary{% endif %}">
+                <div class="card-header text-center bg-primary text-white">
+                    <h4 class="my-0">Basic</h4>
+                </div>
+                <div class="card-body text-center">
+                    <h1 class="card-title">$9.99<small class="text-muted fw-light">/month</small></h1>
+                    <ul class="list-unstyled mt-3 mb-4 text-start">
+                        <li class="py-1"><i class="bi bi-check text-success"></i> All Free features</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> ICT Analysis</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> Unlimited trades</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> Technical Indicators</li>
+                        <li class="py-1 text-muted"><i class="bi bi-x"></i> ML Predictions</li>
+                    </ul>
+                    {% if user['subscription_plan'] == 'basic' %}
+                    <button class="btn btn-outline-primary w-100" disabled>Current Plan</button>
+                    {% else %}
+                    <button type="button" class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#subscribeBasic">Subscribe</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Pro Plan -->
+        <div class="col-md-3 mb-4">
+            <div class="card h-100 border-warning {% if user['subscription_plan'] == 'pro' %}border-3{% endif %}">
+                <div class="card-header text-center bg-warning">
+                    <h4 class="my-0"><i class="bi bi-star-fill"></i> Pro</h4>
+                </div>
+                <div class="card-body text-center">
+                    <h1 class="card-title">$29.99<small class="text-muted fw-light">/month</small></h1>
+                    <ul class="list-unstyled mt-3 mb-4 text-start">
+                        <li class="py-1"><i class="bi bi-check text-success"></i> All Basic features</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> ML Predictions</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> Priority support</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> Advanced analytics</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> Export reports</li>
+                    </ul>
+                    {% if user['subscription_plan'] == 'pro' %}
+                    <button class="btn btn-outline-warning w-100" disabled>Current Plan</button>
+                    {% else %}
+                    <button type="button" class="btn btn-warning w-100" data-bs-toggle="modal" data-bs-target="#subscribePro">Subscribe</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        </div>
+
+    <div class="text-center mt-4">
+        <p class="text-muted small">
+            <i class="bi bi-shield-check"></i> Secure payment processing. Cancel anytime.
+        </p>
+    </div>
+</div>
+
+<!-- Subscribe Basic Modal -->
+<div class="modal fade" id="subscribeBasic" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-credit-card"></i> Subscribe to Basic Plan</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/subscribe/basic" method="POST">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <h5 class="mb-2">Basic Plan - $9.99/month</h5>
+                        <p class="mb-0 small">Please complete your payment and enter the transaction ID below.</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Payment Method</label>
+                        <select name="payment_method" class="form-select" required>
+                            <option value="">Select payment method</option>
+                            <option value="bank_transfer">Bank Transfer</option>
+                            <option value="paypal">PayPal</option>
+                            <option value="crypto">Cryptocurrency</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Transaction ID / Reference Number</label>
+                        <input type="text" name="transaction_id" id="basicTxId" class="form-control" placeholder="Enter your transaction ID" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirm Transaction ID</label>
+                        <input type="text" name="transaction_id_confirm" id="basicTxIdConfirm" class="form-control" placeholder="Re-enter transaction ID" required>
+                        <small class="text-muted" id="basicTxMatch"></small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="basicSubmitBtn">Submit Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Subscribe Pro Modal -->
+<div class="modal fade" id="subscribePro" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title"><i class="bi bi-star-fill"></i> Subscribe to Pro Plan</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/subscribe/pro" method="POST">
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <h5 class="mb-2">Pro Plan - $29.99/month</h5>
+                        <p class="mb-0 small">Please complete your payment and enter the transaction ID below.</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Payment Method</label>
+                        <select name="payment_method" class="form-select" required>
+                            <option value="">Select payment method</option>
+                            <option value="bank_transfer">Bank Transfer</option>
+                            <option value="paypal">PayPal</option>
+                            <option value="crypto">Cryptocurrency</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Transaction ID / Reference Number</label>
+                        <input type="text" name="transaction_id" id="proTxId" class="form-control" placeholder="Enter your transaction ID" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirm Transaction ID</label>
+                        <input type="text" name="transaction_id_confirm" id="proTxIdConfirm" class="form-control" placeholder="Re-enter transaction ID" required>
+                        <small class="text-muted" id="proTxMatch"></small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning" id="proSubmitBtn">Submit Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function checkMatch(txId, txConfirm, matchEl, submitBtn) {
+    const id1 = document.getElementById(txId).value;
+    const id2 = document.getElementById(txConfirm).value;
+    const match = document.getElementById(matchEl);
+    const btn = document.getElementById(submitBtn);
+    
+    if (id2 === '') {
+        match.innerHTML = '';
+        btn.disabled = false;
+    } else if (id1 === id2) {
+        match.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> Transaction IDs match</span>';
+        btn.disabled = false;
+    } else {
+        match.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Transaction IDs do not match</span>';
+        btn.disabled = true;
+    }
+}
+
+// Basic plan validation
+document.getElementById('basicTxId').addEventListener('input', () => checkMatch('basicTxId', 'basicTxIdConfirm', 'basicTxMatch', 'basicSubmitBtn'));
+document.getElementById('basicTxIdConfirm').addEventListener('input', () => checkMatch('basicTxId', 'basicTxIdConfirm', 'basicTxMatch', 'basicSubmitBtn'));
+
+// Pro plan validation
+document.getElementById('proTxId').addEventListener('input', () => checkMatch('proTxId', 'proTxIdConfirm', 'proTxMatch', 'proSubmitBtn'));
+document.getElementById('proTxIdConfirm').addEventListener('input', () => checkMatch('proTxId', 'proTxIdConfirm', 'proTxMatch', 'proSubmitBtn'));
+</script>
+{% endblock %}

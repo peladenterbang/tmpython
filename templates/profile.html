@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+
+{% block title %}Profile - Forex Risk Manager{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h4 class="mb-0"><i class="bi bi-person-circle"></i> My Profile</h4>
+                </div>
+                <div class="card-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-3 text-center">
+                            <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 100px; height: 100px; font-size: 40px;">
+                                {{ user['name'][0]|upper }}
+                            </div>
+                        </div>
+                        <div class="col-md-9">
+                            <h3>{{ user['name'] }}</h3>
+                            <p class="text-muted mb-2">{{ user['email'] }}</p>
+                            <span class="badge bg-{{ 'warning' if user['subscription_plan'] == 'pro' else 'primary' if user['subscription_plan'] == 'basic' else 'secondary' }} fs-6">
+                                {{ (user['subscription_plan'] or 'free')|title }} Plan
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5><i class="bi bi-calendar"></i> Account Info</h5>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td class="text-muted">Member since:</td>
+                                    <td>{{ user['created_at'][:10] if user['created_at'] else 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Subscription:</td>
+                                    <td>{{ (user['subscription_plan'] or 'Free')|title }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Expires:</td>
+                                    <td>
+                                        {% if user['subscription_expires'] %}
+                                            {{ user['subscription_expires'][:10] }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h5><i class="bi bi-star"></i> Plan Features</h5>
+                            {% set plan = user['subscription_plan'] or 'free' %}
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between">
+                                    Dashboard <i class="bi bi-check-circle text-success"></i>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    Calculator <i class="bi bi-check-circle text-success"></i>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    ICT Analysis 
+                                    <i class="bi bi-{{ 'check-circle text-success' if plan in ['basic', 'pro'] else 'x-circle text-muted' }}"></i>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    ML Predictions 
+                                    <i class="bi bi-{{ 'check-circle text-success' if plan == 'pro' else 'x-circle text-muted' }}"></i>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('subscription') }}" class="btn btn-primary">
+                            <i class="bi bi-arrow-up-circle"></i> Upgrade Plan
+                        </a>
+                        <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">
+                            <i class="bi bi-box-arrow-right"></i> Logout
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Payment History -->
+            <div class="card mt-4">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-receipt"></i> Payment History</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if payments %}
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Plan</th>
+                                <th>Amount</th>
+                                <th>Method</th>
+                                <th>Transaction ID</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in payments %}
+                            <tr>
+                                <td>{{ payment['created_at'][:10] if payment['created_at'] else '-' }}</td>
+                                <td>{{ payment['plan']|title }}</td>
+                                <td>${{ "%.2f"|format(payment['amount']) }}</td>
+                                <td>{{ payment['payment_method']|replace('_', ' ')|title if payment['payment_method'] else '-' }}</td>
+                                <td><code class="small">{{ payment['transaction_id'] or '-' }}</code></td>
+                                <td>
+                                    {% if payment['status'] == 'completed' %}
+                                    <span class="badge bg-success"><i class="bi bi-check-circle"></i> Completed</span>
+                                    {% elif payment['status'] == 'pending' %}
+                                    <span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Pending</span>
+                                    {% elif payment['status'] == 'failed' %}
+                                    <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>
+                                    {% elif payment['status'] == 'refunded' %}
+                                    <span class="badge bg-info"><i class="bi bi-arrow-counterclockwise"></i> Refunded</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ payment['status']|title }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-receipt" style="font-size: 2rem;"></i>
+                        <p class="mt-2 mb-0">No payment history yet</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
