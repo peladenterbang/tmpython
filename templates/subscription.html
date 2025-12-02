@@ -45,6 +45,7 @@
                         <li class="py-1"><i class="bi bi-check text-success"></i> 5 trades/month</li>
                         <li class="py-1 text-muted"><i class="bi bi-x"></i> ICT Analysis</li>
                         <li class="py-1 text-muted"><i class="bi bi-x"></i> ML Predictions</li>
+                        <li class="py-1 text-muted"><i class="bi bi-x"></i> ARIMA Forecast</li>
                     </ul>
                     {% if user['subscription_plan'] == 'free' or not user['subscription_plan'] %}
                     <button class="btn btn-outline-secondary w-100" disabled>Current Plan</button>
@@ -68,7 +69,9 @@
                         <li class="py-1"><i class="bi bi-check text-success"></i> ICT Analysis</li>
                         <li class="py-1"><i class="bi bi-check text-success"></i> Unlimited trades</li>
                         <li class="py-1"><i class="bi bi-check text-success"></i> Technical Indicators</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> Candlestick Chart</li>
                         <li class="py-1 text-muted"><i class="bi bi-x"></i> ML Predictions</li>
+                        <li class="py-1 text-muted"><i class="bi bi-x"></i> ARIMA Forecast</li>
                     </ul>
                     {% if user['subscription_plan'] == 'basic' %}
                     <button class="btn btn-outline-primary w-100" disabled>Current Plan</button>
@@ -90,9 +93,9 @@
                     <ul class="list-unstyled mt-3 mb-4 text-start">
                         <li class="py-1"><i class="bi bi-check text-success"></i> All Basic features</li>
                         <li class="py-1"><i class="bi bi-check text-success"></i> ML Predictions</li>
-                        <li class="py-1"><i class="bi bi-check text-success"></i> Priority support</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> ARIMA Forecast</li>
                         <li class="py-1"><i class="bi bi-check text-success"></i> Advanced analytics</li>
-                        <li class="py-1"><i class="bi bi-check text-success"></i> Export reports</li>
+                        <li class="py-1"><i class="bi bi-check text-success"></i> Priority support</li>
                     </ul>
                     {% if user['subscription_plan'] == 'pro' %}
                     <button class="btn btn-outline-warning w-100" disabled>Current Plan</button>

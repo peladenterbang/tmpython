@@ -1,0 +1,570 @@
+{% extends "base.html" %}
+
+{% block title %}ARIMA Analysis - Forex Risk Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-graph-up-arrow"></i> ARIMA Forcasting Time Series Analysis</h4>
+        <small class="text-muted">Autoregressive Integrated Moving Average forecasting model</small>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Settings Sidebar -->
+    <div class="col-md-3">
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-gear"></i> Settings
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Currency Pair</label>
+                    <select id="pair" class="form-select">
+                        <optgroup label="Major Pairs">
+                            <option value="EUR/USD" selected>EUR/USD</option>
+                            <option value="GBP/USD">GBP/USD</option>
+                            <option value="USD/JPY">USD/JPY</option>
+                            <option value="USD/CHF">USD/CHF</option>
+                            <option value="AUD/USD">AUD/USD</option>
+                            <option value="USD/CAD">USD/CAD</option>
+                            <option value="NZD/USD">NZD/USD</option>
+                        </optgroup>
+                        <optgroup label="Cross Pairs">
+                            <option value="EUR/GBP">EUR/GBP</option>
+                            <option value="EUR/JPY">EUR/JPY</option>
+                            <option value="GBP/JPY">GBP/JPY</option>
+                            <option value="AUD/JPY">AUD/JPY</option>
+                        </optgroup>
+                        <optgroup label="Metals">
+                            <option value="XAU/USD">XAU/USD (Gold)</option>
+                            <option value="XAG/USD">XAG/USD (Silver)</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Historical Period</label>
+                    <select id="period" class="form-select">
+                        <option value="1mo">1 Month</option>
+                        <option value="3mo" selected>3 Months</option>
+                        <option value="6mo">6 Months</option>
+                        <option value="1y">1 Year</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Interval</label>
+                    <select id="interval" class="form-select">
+                        <option value="1h">1 Hour</option>
+                        <option value="4h">4 Hours</option>
+                        <option value="1d" selected>1 Day</option>
+                        <option value="1wk">1 Week</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Forecast Periods</label>
+                    <select id="forecastPeriods" class="form-select">
+                        <option value="3">3 Periods</option>
+                        <option value="5" selected>5 Periods</option>
+                        <option value="7">7 Periods</option>
+                        <option value="10">10 Periods</option>
+                    </select>
+                </div>
+                <button id="analyzeBtn" class="btn btn-primary w-100">
+                    <i class="bi bi-play-fill"></i> Run Analysis
+                </button>
+            </div>
+        </div>
+
+        <!-- Model Info -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> About ARIMA
+            </div>
+            <div class="card-body small">
+                <p class="mb-2 fw-bold">ARIMA(p, d, q) Components:</p>
+                
+                <div class="mb-2 p-2 bg-light">
+                    <strong class="text-primary">AR(p)</strong> - Autoregressive
+                    <div class="text-muted" style="font-size:11px;">
+                        Y<sub>t</sub> = c + φ₁Y<sub>t-1</sub> + φ₂Y<sub>t-2</sub> + ... + φₚY<sub>t-p</sub>
+                    </div>
+                    <small>Uses p past values to predict current value</small>
+                </div>
+                
+                <div class="mb-2 p-2 bg-light">
+                    <strong class="text-primary">I(d)</strong> - Integrated
+                    <div class="text-muted" style="font-size:11px;">
+                        Y'<sub>t</sub> = Y<sub>t</sub> - Y<sub>t-1</sub>
+                    </div>
+                    <small>Differencing d times to make data stationary</small>
+                </div>
+                
+                <div class="mb-2 p-2 bg-light">
+                    <strong class="text-primary">MA(q)</strong> - Moving Average
+                    <div class="text-muted" style="font-size:11px;">
+                        Y<sub>t</sub> = μ + ε<sub>t</sub> + θ₁ε<sub>t-1</sub> + ... + θ<sub>q</sub>ε<sub>t-q</sub>
+                    </div>
+                    <small>Uses q past forecast errors</small>
+                </div>
+                
+                <hr>
+                <p class="mb-2 fw-bold">How to Read Charts:</p>
+                <p class="mb-1"><strong>ACF</strong>: Determines MA order (q)</p>
+                <p class="mb-1"><strong>PACF</strong>: Determines AR order (p)</p>
+                <small class="text-muted">Significant spikes indicate the order to use</small>
+                
+                <hr>
+                <p class="mb-2 fw-bold">Tuning for Accuracy:</p>
+                <ol class="ps-3 mb-2" style="font-size:11px;">
+                    <li class="mb-1"><strong>Stationarity</strong>: Data must be stationary (constant mean/variance)</li>
+                    <li class="mb-1"><strong>Order Selection</strong>: Use ACF/PACF to find optimal p, d, q</li>
+                    <li class="mb-1"><strong>Timeframe</strong>: Daily/Weekly works better than minute data</li>
+                    <li class="mb-1"><strong>Data Length</strong>: 50-200 observations optimal</li>
+                    <li class="mb-1"><strong>Validation</strong>: Backtest on out-of-sample data</li>
+                </ol>
+                
+                <hr>
+                <p class="mb-2 fw-bold">Backtest Metrics:</p>
+                <div style="font-size:11px;">
+                    <p class="mb-1"><strong>Direction Accuracy</strong>: % of correct up/down predictions</p>
+                    <p class="mb-1"><strong>RMSE</strong>: Root Mean Square Error (lower = better)</p>
+                    <p class="mb-1"><strong>MAPE</strong>: Mean Absolute % Error (lower = better)</p>
+                </div>
+                
+                <div class="alert alert-info p-2 mt-2 mb-0" style="font-size:10px;">
+                    <i class="bi bi-lightbulb"></i> <strong>Tip:</strong> 60%+ direction accuracy is considered good for forex. Always combine with other analysis methods.
+                </div>
+            </div>
+        </div>
+
+        <!-- Signal Card -->
+        <div class="card mb-3" id="signalCard" style="display: none;">
+            <div class="card-header">
+                <i class="bi bi-signpost"></i> Trading Signal
+            </div>
+            <div class="card-body text-center">
+                <div id="signalBadge" class="mb-2"></div>
+                <div id="signalStrength" class="mb-2"></div>
+                <small id="signalReason" class="text-muted"></small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="col-md-9">
+        <!-- Loading -->
+        <div id="loading" class="text-center py-5" style="display: none;">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted">Running ARIMA analysis...</p>
+        </div>
+
+        <!-- Chart -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-graph-up"></i> Price Chart with Forecast</span>
+                <span id="currentPrice" class="badge bg-dark">--</span>
+            </div>
+            <div class="card-body p-0" style="height: 400px;">
+                <div id="chart" style="width: 100%; height: 100%;"></div>
+            </div>
+        </div>
+
+        <!-- Forecast Table -->
+        <div class="card mb-3" id="forecastCard" style="display: none;">
+            <div class="card-header">
+                <i class="bi bi-table"></i> Forecast Results
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>Date</th>
+                            <th>Forecast</th>
+                            <th>80% CI</th>
+                            <th>95% CI</th>
+                            <th>Change</th>
+                        </tr>
+                    </thead>
+                    <tbody id="forecastTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Model Diagnostics -->
+            <div class="col-md-6">
+                <div class="card mb-3" id="diagnosticsCard" style="display: none;">
+                    <div class="card-header">
+                        <i class="bi bi-clipboard-data"></i> Model Diagnostics
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm mb-0">
+                            <tbody id="diagnosticsTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Backtest Results -->
+            <div class="col-md-6">
+                <div class="card mb-3" id="backtestCard" style="display: none;">
+                    <div class="card-header">
+                        <i class="bi bi-arrow-repeat"></i> Backtest Results
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6 mb-3">
+                                <div id="backtestAccuracy" class="h3 mb-0">--</div>
+                                <small class="text-muted">Direction Accuracy</small>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <div id="backtestMAPE" class="h3 mb-0">--</div>
+                                <small class="text-muted">MAPE %</small>
+                            </div>
+                            <div class="col-6">
+                                <div id="backtestRMSE" class="h5 mb-0">--</div>
+                                <small class="text-muted">RMSE</small>
+                            </div>
+                            <div class="col-6">
+                                <div id="backtestMAE" class="h5 mb-0">--</div>
+                                <small class="text-muted">MAE</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACF/PACF -->
+        <div class="card mb-3" id="acfCard" style="display: none;">
+            <div class="card-header">
+                <i class="bi bi-bar-chart"></i> Autocorrelation Analysis
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-center">ACF (Autocorrelation)</h6>
+                        <div id="acfChart" style="height: 150px;"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-center">PACF (Partial Autocorrelation)</h6>
+                        <div id="pacfChart" style="height: 150px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="error" class="alert alert-danger mt-3" style="display: none;"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+let chart = null;
+let lineSeries = null;
+let forecastSeries = null;
+let upperBand = null;
+let lowerBand = null;
+
+document.getElementById('analyzeBtn').addEventListener('click', runAnalysis);
+
+async function runAnalysis() {
+    const pair = document.getElementById('pair').value;
+    const period = document.getElementById('period').value;
+    const interval = document.getElementById('interval').value;
+    const forecastPeriods = document.getElementById('forecastPeriods').value;
+    
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('error').style.display = 'none';
+    document.getElementById('forecastCard').style.display = 'none';
+    document.getElementById('diagnosticsCard').style.display = 'none';
+    document.getElementById('backtestCard').style.display = 'none';
+    document.getElementById('acfCard').style.display = 'none';
+    document.getElementById('signalCard').style.display = 'none';
+    
+    try {
+        const response = await fetch('/analyze_arima', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pair, period, interval, forecast_periods: forecastPeriods })
+        });
+        
+        const data = await response.json();
+        document.getElementById('loading').style.display = 'none';
+        
+        if (data.error) {
+            document.getElementById('error').textContent = data.error;
+            document.getElementById('error').style.display = 'block';
+            return;
+        }
+        
+        displayResults(data);
+    } catch (err) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error').textContent = 'Error: ' + err.message;
+        document.getElementById('error').style.display = 'block';
+    }
+}
+
+function displayResults(data) {
+    // Update current price
+    document.getElementById('currentPrice').textContent = data.current_price.toFixed(5);
+    
+    // Create chart
+    createChart(data);
+    
+    // Display forecast table
+    displayForecast(data);
+    
+    // Display diagnostics
+    displayDiagnostics(data.metrics);
+    
+    // Display backtest
+    if (data.backtest) {
+        displayBacktest(data.backtest);
+    }
+    
+    // Display ACF/PACF
+    displayACF(data.metrics);
+    
+    // Display signal
+    displaySignal(data.signal);
+}
+
+function createChart(data) {
+    const container = document.getElementById('chart');
+    container.innerHTML = '';
+    
+    chart = LightweightCharts.createChart(container, {
+        width: container.clientWidth,
+        height: 400,
+        layout: {
+            background: { color: '#ffffff' },
+            textColor: '#333'
+        },
+        grid: {
+            vertLines: { color: '#f0f0f0' },
+            horzLines: { color: '#f0f0f0' }
+        },
+        timeScale: {
+            timeVisible: true,
+            secondsVisible: false
+        }
+    });
+    
+    // Historical line
+    lineSeries = chart.addLineSeries({
+        color: '#2563eb',
+        lineWidth: 2,
+        title: 'Historical'
+    });
+    
+    const historicalData = data.historical.dates.map((date, i) => ({
+        time: new Date(date).getTime() / 1000,
+        value: data.historical.prices[i]
+    }));
+    lineSeries.setData(historicalData);
+    
+    // Forecast line
+    forecastSeries = chart.addLineSeries({
+        color: '#10b981',
+        lineWidth: 2,
+        lineStyle: 2,
+        title: 'Forecast'
+    });
+    
+    const lastHistorical = historicalData[historicalData.length - 1];
+    const forecastData = [{ time: lastHistorical.time, value: lastHistorical.value }];
+    
+    data.forecast_dates.forEach((date, i) => {
+        forecastData.push({
+            time: new Date(date).getTime() / 1000,
+            value: data.predictions[i]
+        });
+    });
+    forecastSeries.setData(forecastData);
+    
+    // Confidence bands
+    upperBand = chart.addLineSeries({
+        color: 'rgba(16, 185, 129, 0.3)',
+        lineWidth: 1,
+        lineStyle: 1
+    });
+    
+    lowerBand = chart.addLineSeries({
+        color: 'rgba(16, 185, 129, 0.3)',
+        lineWidth: 1,
+        lineStyle: 1
+    });
+    
+    const upperData = [{ time: lastHistorical.time, value: lastHistorical.value }];
+    const lowerData = [{ time: lastHistorical.time, value: lastHistorical.value }];
+    
+    data.forecast_dates.forEach((date, i) => {
+        upperData.push({
+            time: new Date(date).getTime() / 1000,
+            value: data.confidence[i].upper_95
+        });
+        lowerData.push({
+            time: new Date(date).getTime() / 1000,
+            value: data.confidence[i].lower_95
+        });
+    });
+    
+    upperBand.setData(upperData);
+    lowerBand.setData(lowerData);
+    
+    chart.timeScale().fitContent();
+}
+
+function displayForecast(data) {
+    const table = document.getElementById('forecastTable');
+    table.innerHTML = '';
+    
+    data.forecast_dates.forEach((date, i) => {
+        const conf = data.confidence[i];
+        const change = ((conf.prediction - data.current_price) / data.current_price * 100).toFixed(3);
+        const changeClass = change >= 0 ? 'text-success' : 'text-danger';
+        const changeSign = change >= 0 ? '+' : '';
+        
+        table.innerHTML += `
+            <tr>
+                <td><strong>T+${i + 1}</strong></td>
+                <td><small>${date}</small></td>
+                <td><strong>${conf.prediction.toFixed(5)}</strong></td>
+                <td><small>${conf.lower_80.toFixed(5)} - ${conf.upper_80.toFixed(5)}</small></td>
+                <td><small>${conf.lower_95.toFixed(5)} - ${conf.upper_95.toFixed(5)}</small></td>
+                <td class="${changeClass}">${changeSign}${change}%</td>
+            </tr>
+        `;
+    });
+    
+    document.getElementById('forecastCard').style.display = 'block';
+}
+
+function displayDiagnostics(metrics) {
+    const table = document.getElementById('diagnosticsTable');
+    const stationary = metrics.is_stationary ? 
+        '<span class="badge badge-soft-success">Stationary</span>' : 
+        '<span class="badge badge-soft-warning">Non-Stationary</span>';
+    const volCluster = metrics.volatility_clustering ?
+        '<span class="badge badge-soft-warning">Yes</span>' :
+        '<span class="badge badge-soft-success">No</span>';
+    
+    table.innerHTML = `
+        <tr><td>Observations</td><td class="text-end"><strong>${metrics.observations}</strong></td></tr>
+        <tr><td>Mean Return</td><td class="text-end">${metrics.mean_return}%</td></tr>
+        <tr><td>Std Deviation</td><td class="text-end">${metrics.std_return}%</td></tr>
+        <tr><td>Stationarity</td><td class="text-end">${stationary}</td></tr>
+        <tr><td>Volatility Clustering</td><td class="text-end">${volCluster}</td></tr>
+        <tr><td>Suggested Order</td><td class="text-end"><strong>ARIMA(${metrics.suggested_ar},${metrics.suggested_i},${metrics.suggested_ma})</strong></td></tr>
+    `;
+    
+    document.getElementById('diagnosticsCard').style.display = 'block';
+}
+
+function displayBacktest(backtest) {
+    const accColor = backtest.accuracy >= 60 ? 'text-success' : backtest.accuracy >= 50 ? 'text-warning' : 'text-danger';
+    
+    document.getElementById('backtestAccuracy').innerHTML = `<span class="${accColor}">${backtest.accuracy}%</span>`;
+    document.getElementById('backtestMAPE').textContent = backtest.mape + '%';
+    document.getElementById('backtestRMSE').textContent = backtest.rmse.toFixed(6);
+    document.getElementById('backtestMAE').textContent = backtest.mae.toFixed(6);
+    
+    document.getElementById('backtestCard').style.display = 'block';
+}
+
+function displayACF(metrics) {
+    // ACF Chart
+    const acfContainer = document.getElementById('acfChart');
+    acfContainer.innerHTML = '';
+    
+    const acfCount = metrics.acf.length;
+    const acfBarWidth = Math.floor(100 / acfCount) - 2;
+    
+    const acfHtml = metrics.acf.map((val, i) => {
+        const height = Math.min(Math.abs(val) * 100, 45);
+        const color = val >= 0 ? '#2563eb' : '#dc2626';
+        return `<div style="display:inline-block;width:${acfBarWidth}%;margin:0 1%;position:relative;height:100%;vertical-align:top;">
+            <div style="position:absolute;${val >= 0 ? 'bottom:50%' : 'top:50%'};left:20%;right:20%;height:${height}%;background:${color};"></div>
+        </div>`;
+    }).join('');
+    
+    const acfLabels = metrics.acf.map((val, i) => {
+        return `<div style="display:inline-block;width:${acfBarWidth}%;margin:0 1%;text-align:center;font-size:9px;color:#666;">${i+1}</div>`;
+    }).join('');
+    
+    acfContainer.innerHTML = `
+        <div style="height:calc(100% - 20px);position:relative;overflow:hidden;">
+            <div style="position:absolute;top:50%;left:0;right:0;border-top:1px dashed #999;transform:translateY(-50%);"></div>
+            <div style="height:100%;display:flex;align-items:stretch;">${acfHtml}</div>
+        </div>
+        <div style="height:20px;display:flex;">${acfLabels}</div>
+    `;
+    
+    // PACF Chart
+    const pacfContainer = document.getElementById('pacfChart');
+    pacfContainer.innerHTML = '';
+    
+    const pacfCount = metrics.pacf.length;
+    const pacfBarWidth = Math.floor(100 / pacfCount) - 2;
+    
+    const pacfHtml = metrics.pacf.map((val, i) => {
+        const height = Math.min(Math.abs(val) * 100, 45);
+        const color = val >= 0 ? '#2563eb' : '#dc2626';
+        return `<div style="display:inline-block;width:${pacfBarWidth}%;margin:0 1%;position:relative;height:100%;vertical-align:top;">
+            <div style="position:absolute;${val >= 0 ? 'bottom:50%' : 'top:50%'};left:20%;right:20%;height:${height}%;background:${color};"></div>
+        </div>`;
+    }).join('');
+    
+    const pacfLabels = metrics.pacf.map((val, i) => {
+        return `<div style="display:inline-block;width:${pacfBarWidth}%;margin:0 1%;text-align:center;font-size:9px;color:#666;">${i+1}</div>`;
+    }).join('');
+    
+    pacfContainer.innerHTML = `
+        <div style="height:calc(100% - 20px);position:relative;overflow:hidden;">
+            <div style="position:absolute;top:50%;left:0;right:0;border-top:1px dashed #999;transform:translateY(-50%);"></div>
+            <div style="height:100%;display:flex;align-items:stretch;">${pacfHtml}</div>
+        </div>
+        <div style="height:20px;display:flex;">${pacfLabels}</div>
+    `;
+    
+    document.getElementById('acfCard').style.display = 'block';
+}
+
+function displaySignal(signal) {
+    const signalBadge = document.getElementById('signalBadge');
+    const signalStrength = document.getElementById('signalStrength');
+    const signalReason = document.getElementById('signalReason');
+    
+    let badgeClass = 'badge-soft-secondary';
+    if (signal.signal === 'BUY') badgeClass = 'badge-soft-success';
+    else if (signal.signal === 'SELL') badgeClass = 'badge-soft-danger';
+    
+    signalBadge.innerHTML = `<span class="badge ${badgeClass} fs-5">${signal.signal}</span>`;
+    
+    // Strength bar
+    const strengthColor = signal.signal === 'BUY' ? '#10b981' : signal.signal === 'SELL' ? '#ef4444' : '#6b7280';
+    signalStrength.innerHTML = `
+        <div class="progress" style="height: 8px;">
+            <div class="progress-bar" style="width: ${signal.strength}%; background: ${strengthColor};"></div>
+        </div>
+        <small class="text-muted">${signal.strength}% strength</small>
+    `;
+    
+    signalReason.textContent = signal.reason;
+    
+    document.getElementById('signalCard').style.display = 'block';
+}
+
+// Resize handler
+window.addEventListener('resize', () => {
+    if (chart) {
+        chart.applyOptions({ width: document.getElementById('chart').clientWidth });
+    }
+});
+</script>
+{% endblock %}

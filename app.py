@@ -12,6 +12,10 @@ from indicators import (
 )
 from ict_methods import analyze_ict
 from ml_predictor import predict_forex
+from arima_predictor import (
+    get_arima_prediction, calculate_arima_metrics,
+    calculate_forecast_confidence, backtest_arima, get_trading_signal
+)
 
 # Yahoo Finance ticker symbols for forex pairs
 FOREX_TICKERS = {
@@ -1154,6 +1158,100 @@ def analyze_ml():
     except Exception as e:
         import traceback
         return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+@app.route('/arima')
+@login_required
+@subscription_required('pro')
+def arima_page():
+    """ARIMA Analysis Page"""
+    conn = get_db()
+    account = conn.execute('SELECT * FROM account WHERE user_id = ?', (session['user_id'],)).fetchone()
+    conn.close()
+    balance = account['current_balance'] if account else 10000
+    return render_template('arima.html', balance=balance)
+
+@app.route('/analyze_arima', methods=['POST'])
+@login_required
+def analyze_arima():
+    """
+    ARIMA Time Series Analysis and Prediction
+    """
+    data = request.get_json()
+    pair = data.get('pair', 'EUR/USD')
+    period = data.get('period', '3mo')
+    interval = data.get('interval', '1d')
+    forecast_periods = int(data.get('forecast_periods', 5))
+    
+    ticker_symbol = FOREX_TICKERS.get(pair)
+    if not ticker_symbol:
+        return jsonify({'error': f'Unknown pair: {pair}'}), 400
+    
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        df = ticker.history(period=period, interval=interval)
+        
+        if df.empty:
+            return jsonify({'error': 'No data available'}), 400
+        
+        closes = df['Close'].tolist()
+        dates = df.index.strftime('%Y-%m-%d %H:%M').tolist()
+        
+        if len(closes) < 30:
+            return jsonify({'error': 'Not enough data (need at least 30 candles)'}), 400
+        
+        # Calculate ARIMA metrics
+        metrics = calculate_arima_metrics(closes)
+        
+        # Get predictions
+        predictions, error = get_arima_prediction(closes, periods=forecast_periods)
+        if error:
+            return jsonify({'error': error}), 400
+        
+        # Calculate confidence intervals
+        confidence = calculate_forecast_confidence(closes, predictions)
+        
+        # Backtest
+        backtest, bt_error = backtest_arima(closes)
+        
+        # Trading signal
+        signal = get_trading_signal(closes, predictions)
+        
+        # Generate forecast dates
+        last_date = df.index[-1]
+        forecast_dates = []
+        for i in range(1, forecast_periods + 1):
+            if interval == '1d':
+                next_date = last_date + timedelta(days=i)
+            elif interval == '1h':
+                next_date = last_date + timedelta(hours=i)
+            elif interval == '4h':
+                next_date = last_date + timedelta(hours=4*i)
+            elif interval == '1wk':
+                next_date = last_date + timedelta(weeks=i)
+            else:
+                next_date = last_date + timedelta(days=i)
+            forecast_dates.append(next_date.strftime('%Y-%m-%d %H:%M'))
+        
+        return jsonify({
+            'pair': pair,
+            'period': period,
+            'interval': interval,
+            'current_price': round(closes[-1], 5),
+            'metrics': metrics,
+            'predictions': predictions,
+            'confidence': confidence,
+            'forecast_dates': forecast_dates,
+            'backtest': backtest,
+            'signal': signal,
+            'historical': {
+                'dates': dates,
+                'prices': closes
+            }
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
 
 if __name__ == '__main__':
     init_db()

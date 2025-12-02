@@ -112,6 +112,72 @@
                 </table>
             </div>
         </div>
+
+        <!-- About ML Predict -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> How It Works
+            </div>
+            <div class="card-body small">
+                <p class="mb-2 fw-bold">Entry Point Selection:</p>
+                <div class="mb-2 p-2 bg-light" style="font-size:11px;">
+                    <strong class="text-primary">1. Trend Analysis</strong>
+                    <div>Combines multiple indicators:</div>
+                    <ul class="mb-0 ps-3">
+                        <li>SMA(20) vs SMA(50) crossover</li>
+                        <li>RSI(14) overbought/oversold</li>
+                        <li>MACD histogram direction</li>
+                        <li>Bollinger Band position</li>
+                    </ul>
+                </div>
+                
+                <div class="mb-2 p-2 bg-light" style="font-size:11px;">
+                    <strong class="text-primary">2. Entry Price</strong>
+                    <div>Based on signal direction:</div>
+                    <ul class="mb-0 ps-3">
+                        <li><strong>BUY</strong>: Current price + small buffer</li>
+                        <li><strong>SELL</strong>: Current price - small buffer</li>
+                    </ul>
+                </div>
+                
+                <hr>
+                <p class="mb-2 fw-bold">Stop Loss Calculation:</p>
+                <div class="mb-2 p-2 bg-light" style="font-size:11px;">
+                    <strong class="text-danger">SL = Entry ± ATR × Multiplier</strong>
+                    <ul class="mb-0 ps-3">
+                        <li><strong>ATR(14)</strong>: Average True Range</li>
+                        <li><strong>Multiplier</strong>: 1.5x - 2.0x ATR</li>
+                        <li>BUY: SL below entry</li>
+                        <li>SELL: SL above entry</li>
+                    </ul>
+                </div>
+                
+                <hr>
+                <p class="mb-2 fw-bold">Take Profit Calculation:</p>
+                <div class="mb-2 p-2 bg-light" style="font-size:11px;">
+                    <strong class="text-success">TP = Entry ± (SL Distance × R:R)</strong>
+                    <ul class="mb-0 ps-3">
+                        <li><strong>R:R Ratio</strong>: 1.5:1 to 3:1</li>
+                        <li>Higher confidence = higher R:R</li>
+                        <li>Near S/R levels adjusted</li>
+                    </ul>
+                </div>
+                
+                <hr>
+                <p class="mb-2 fw-bold">Lot Size Formula:</p>
+                <div class="p-2 bg-light" style="font-size:11px;">
+                    <strong class="text-primary">Lots = Risk$ / (SL pips × Pip Value)</strong>
+                    <div class="mt-1">
+                        <small>Risk$ = Balance × Risk%</small><br>
+                        <small>Ensures max loss = your risk %</small>
+                    </div>
+                </div>
+                
+                <div class="alert alert-warning p-2 mt-2 mb-0" style="font-size:10px;">
+                    <i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong> ML predictions are probabilistic. Always use proper risk management and don't risk more than 1-2% per trade.
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Main Content -->
