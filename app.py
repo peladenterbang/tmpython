@@ -609,6 +609,28 @@ def init_db():
         )
     ''')
     
+    # Analysis cache table
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS analysis_cache (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            analysis_type VARCHAR(20) NOT NULL,
+            pair VARCHAR(20) NOT NULL,
+            timeframe VARCHAR(10) NOT NULL,
+            signal VARCHAR(10),
+            strength INTEGER,
+            entry_price REAL,
+            stop_loss REAL,
+            take_profit REAL,
+            trend_score REAL,
+            rsi REAL,
+            confidence INTEGER,
+            raw_data TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+    
     # Insert default account if not exists
     cursor = conn.execute('SELECT COUNT(*) FROM account')
     if cursor.fetchone()[0] == 0:
@@ -1055,16 +1077,27 @@ def analyze_ict_route():
     interval = data.get('interval', '15m')
     balance = float(data.get('balance', 10000))
     risk_percent = float(data.get('risk_percent', 1.0))
+    user_id = session.get('user_id')
     
     ticker_symbol = FOREX_TICKERS.get(pair)
     if not ticker_symbol:
         return jsonify({'error': f'Unknown pair: {pair}'}), 400
     
     try:
+        # Get previous analysis from cache
+        conn = get_db()
+        prev_analysis = conn.execute('''
+            SELECT signal, strength, entry_price, trend_score, created_at 
+            FROM analysis_cache 
+            WHERE user_id = ? AND analysis_type = 'ict' AND pair = ? AND timeframe = ?
+            ORDER BY created_at DESC LIMIT 1
+        ''', (user_id, pair, interval)).fetchone()
+        
         ticker = yf.Ticker(ticker_symbol)
         df = ticker.history(period=period, interval=interval)
         
         if df.empty:
+            conn.close()
             return jsonify({'error': 'No data available'}), 400
         
         opens = df['Open'].tolist()
@@ -1074,10 +1107,47 @@ def analyze_ict_route():
         dates = df.index.strftime('%Y-%m-%d %H:%M').tolist()
         
         if len(closes) < 20:
+            conn.close()
             return jsonify({'error': 'Not enough data'}), 400
         
         # Run ICT analysis
         result = analyze_ict(opens, highs, lows, closes, balance, risk_percent, interval)
+        
+        # Extract signal for caching
+        bias = result.get('bias', {})
+        signal = bias.get('direction', 'NEUTRAL')
+        if signal == 'BULLISH':
+            signal = 'BUY'
+        elif signal == 'BEARISH':
+            signal = 'SELL'
+        else:
+            signal = 'WAIT'
+        
+        strength = bias.get('confidence', 0)
+        entry_price = result.get('trade_setup', {}).get('entry', 0)
+        
+        # Save to cache
+        conn.execute('''
+            INSERT INTO analysis_cache 
+            (user_id, analysis_type, pair, timeframe, signal, strength, entry_price, trend_score, confidence)
+            VALUES (?, 'ict', ?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, pair, interval, signal, strength, entry_price, strength, strength))
+        conn.commit()
+        
+        # Add previous analysis to result
+        if prev_analysis:
+            result['previous'] = {
+                'signal': prev_analysis['signal'],
+                'strength': prev_analysis['strength'],
+                'entry_price': prev_analysis['entry_price'],
+                'analyzed_at': prev_analysis['created_at']
+            }
+            result['signal_changed'] = (prev_analysis['signal'] != signal)
+        else:
+            result['previous'] = None
+            result['signal_changed'] = False
+        
+        conn.close()
         
         # Add chart data
         result['pair'] = pair
@@ -1088,6 +1158,8 @@ def analyze_ict_route():
             'lows': lows,
             'closes': closes
         }
+        result['current_signal'] = signal
+        result['analyzed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         return jsonify(result)
     except Exception as e:
@@ -1112,22 +1184,35 @@ def analyze_ml():
     ML-based Entry, TP, SL Prediction
     Uses technical indicators and pattern recognition
     """
+    import json as json_lib
+    
     data = request.get_json()
     pair = data.get('pair', 'EUR/USD')
     period = data.get('period', '1mo')
     interval = data.get('interval', '1h')
     balance = float(data.get('balance', 10000))
     risk_percent = float(data.get('risk_percent', 1.0))
+    user_id = session.get('user_id')
     
     ticker_symbol = FOREX_TICKERS.get(pair)
     if not ticker_symbol:
         return jsonify({'error': f'Unknown pair: {pair}'}), 400
     
     try:
+        # Get previous analysis from cache
+        conn = get_db()
+        prev_analysis = conn.execute('''
+            SELECT signal, strength, entry_price, trend_score, rsi, created_at 
+            FROM analysis_cache 
+            WHERE user_id = ? AND analysis_type = 'ml' AND pair = ? AND timeframe = ?
+            ORDER BY created_at DESC LIMIT 1
+        ''', (user_id, pair, interval)).fetchone()
+        
         ticker = yf.Ticker(ticker_symbol)
         df = ticker.history(period=period, interval=interval)
         
         if df.empty:
+            conn.close()
             return jsonify({'error': 'No data available'}), 400
         
         opens = df['Open'].tolist()
@@ -1137,10 +1222,47 @@ def analyze_ml():
         dates = df.index.strftime('%Y-%m-%d %H:%M').tolist()
         
         if len(closes) < 50:
+            conn.close()
             return jsonify({'error': 'Not enough data (need at least 50 candles)'}), 400
         
         # Run ML prediction
         result = predict_forex(opens, highs, lows, closes, balance, risk_percent)
+        
+        # Extract main prediction for caching
+        main_pred = result['predictions'][0] if result.get('predictions') else {}
+        signal = main_pred.get('direction', 'WAIT')
+        strength = main_pred.get('confidence', 0)
+        entry_price = main_pred.get('entry', 0)
+        stop_loss = main_pred.get('stop_loss', 0)
+        take_profit = main_pred.get('take_profit', 0)
+        trend_score = result.get('trend_score', 0)
+        rsi = result.get('features', {}).get('rsi', 0)
+        
+        # Save to cache
+        conn.execute('''
+            INSERT INTO analysis_cache 
+            (user_id, analysis_type, pair, timeframe, signal, strength, entry_price, stop_loss, take_profit, trend_score, rsi, confidence)
+            VALUES (?, 'ml', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, pair, interval, signal, strength, entry_price, stop_loss, take_profit, trend_score, rsi, strength))
+        conn.commit()
+        
+        # Add previous analysis to result
+        if prev_analysis:
+            result['previous'] = {
+                'signal': prev_analysis['signal'],
+                'strength': prev_analysis['strength'],
+                'entry_price': prev_analysis['entry_price'],
+                'trend_score': prev_analysis['trend_score'],
+                'rsi': prev_analysis['rsi'],
+                'analyzed_at': prev_analysis['created_at']
+            }
+            # Check signal consistency
+            result['signal_changed'] = (prev_analysis['signal'] != signal)
+        else:
+            result['previous'] = None
+            result['signal_changed'] = False
+        
+        conn.close()
         
         # Add chart data
         result['pair'] = pair
@@ -1153,6 +1275,7 @@ def analyze_ml():
         }
         result['period'] = period
         result['interval'] = interval
+        result['analyzed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         return jsonify(result)
     except Exception as e:

@@ -220,6 +220,14 @@
             <i class="bi bi-info-circle"></i> <span id="biasReasonText">Click Analyze to see weekly bias</span>
         </div>
 
+        <!-- Signal Comparison -->
+        <div class="card mb-3" id="comparisonCard" style="display: none;">
+            <div class="card-header">
+                <i class="bi bi-clock-history"></i> Signal Comparison
+            </div>
+            <div class="card-body" id="comparisonBody"></div>
+        </div>
+
         <!-- Custom Trade Calculator -->
         <div class="card mb-3">
             <div class="card-header bg-warning">
@@ -509,6 +517,60 @@ function updateUI(data) {
         `).join('');
     } else {
         fvgDiv.innerHTML = '<p class="text-muted small mb-0">No FVG found</p>';
+    }
+    
+    // Signal Comparison
+    const comparisonBody = document.getElementById('comparisonBody');
+    const currentSignal = data.current_signal || 'WAIT';
+    
+    if (data.previous) {
+        const prev = data.previous;
+        const signalMatch = currentSignal === prev.signal;
+        const statusClass = signalMatch ? 'alert-success' : 'alert-warning';
+        const statusIcon = signalMatch ? 'check-circle-fill' : 'exclamation-triangle-fill';
+        const statusText = signalMatch ? 'Signal Consistent' : 'Signal Changed!';
+        
+        comparisonBody.innerHTML = `
+            <div class="alert ${statusClass} mb-3 py-2">
+                <i class="bi bi-${statusIcon}"></i> <strong>${statusText}</strong>
+            </div>
+            <div class="row text-center">
+                <div class="col-6">
+                    <small class="text-muted">Previous</small>
+                    <div class="h5 mb-1">
+                        <span class="badge ${prev.signal === 'BUY' ? 'badge-soft-success' : prev.signal === 'SELL' ? 'badge-soft-danger' : 'badge-soft-secondary'}">
+                            ${prev.signal || 'N/A'}
+                        </span>
+                    </div>
+                    <small class="text-muted">${prev.strength || 0}% confidence</small>
+                    <div class="small text-muted mt-1">
+                        <i class="bi bi-clock"></i> ${prev.analyzed_at || 'N/A'}
+                    </div>
+                </div>
+                <div class="col-6">
+                    <small class="text-muted">Current</small>
+                    <div class="h5 mb-1">
+                        <span class="badge ${currentSignal === 'BUY' ? 'badge-soft-success' : currentSignal === 'SELL' ? 'badge-soft-danger' : 'badge-soft-secondary'}">
+                            ${currentSignal}
+                        </span>
+                    </div>
+                    <small class="text-muted">${data.bias?.confidence || 0}% confidence</small>
+                    <div class="small text-muted mt-1">
+                        <i class="bi bi-clock"></i> ${data.analyzed_at || 'Just now'}
+                    </div>
+                </div>
+            </div>
+            ${!signalMatch ? '<div class="alert alert-info mt-3 mb-0 py-2 small"><i class="bi bi-info-circle"></i> Signal changed since last analysis. Consider waiting for confirmation.</div>' : ''}
+        `;
+        document.getElementById('comparisonCard').style.display = 'block';
+    } else {
+        comparisonBody.innerHTML = `
+            <div class="text-center text-muted py-2">
+                <i class="bi bi-info-circle"></i> First analysis for this pair/timeframe.<br>
+                <small>Run again later to compare signals.</small>
+            </div>
+        `;
+        document.getElementById('comparisonCard').style.display = 'block';
     }
 }
 
