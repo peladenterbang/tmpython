@@ -1058,9 +1058,11 @@ def ict():
     """ICT Analysis Page"""
     conn = get_db()
     account = conn.execute('SELECT * FROM account WHERE user_id = ?', (session['user_id'],)).fetchone()
+    user = conn.execute('SELECT subscription_plan FROM users WHERE id = ?', (session['user_id'],)).fetchone()
     conn.close()
     balance = account['current_balance'] if account else 10000
-    return render_template('ict.html', balance=balance)
+    subscription = (user['subscription_plan'] or 'free').upper() if user else 'FREE'
+    return render_template('ict.html', balance=balance, subscription=subscription)
 
 @app.route('/analyze_ict', methods=['POST'])
 @login_required
@@ -1173,9 +1175,11 @@ def ml_predict():
     """ML Prediction Page"""
     conn = get_db()
     account = conn.execute('SELECT * FROM account WHERE user_id = ?', (session['user_id'],)).fetchone()
+    user = conn.execute('SELECT subscription_plan FROM users WHERE id = ?', (session['user_id'],)).fetchone()
     conn.close()
     balance = account['current_balance'] if account else 10000
-    return render_template('ml_predict.html', balance=balance)
+    subscription = (user['subscription_plan'] or 'free').upper() if user else 'FREE'
+    return render_template('ml_predict.html', balance=balance, subscription=subscription)
 
 @app.route('/analyze_ml', methods=['POST'])
 @login_required

@@ -297,8 +297,11 @@
 
         <!-- Chart -->
         <div class="card">
-            <div class="card-header bg-dark text-white">
-                <i class="bi bi-graph-up"></i> Chart
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-graph-up"></i> Chart</span>
+                <button id="captureBtn" class="btn btn-sm btn-outline-light" onclick="captureChart()" title="Save Chart">
+                    <i class="bi bi-camera"></i> Capture
+                </button>
             </div>
             <div class="card-body p-0" style="height: 400px;">
                 <div id="chart" style="width: 100%; height: 100%;"></div>
@@ -312,6 +315,61 @@
 <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 let chart = null;
+let currentPair = 'EUR_USD';
+const subscriptionType = '{{ subscription }}';
+
+function captureChart() {
+    if (!chart) {
+        alert('Please analyze a pair first');
+        return;
+    }
+    
+    const container = document.getElementById('chart');
+    const canvases = container.querySelectorAll('canvas');
+    
+    if (canvases.length === 0) {
+        alert('Chart not ready');
+        return;
+    }
+    
+    // Get container dimensions
+    const rect = container.getBoundingClientRect();
+    
+    // Create a new canvas to composite all chart canvases
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = rect.width;
+    exportCanvas.height = rect.height;
+    const ctx = exportCanvas.getContext('2d');
+    
+    // Fill background
+    ctx.fillStyle = '#131722';
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    
+    // Draw all canvases (main chart + price scale + time scale)
+    canvases.forEach(canvas => {
+        const canvasRect = canvas.getBoundingClientRect();
+        const x = canvasRect.left - rect.left;
+        const y = canvasRect.top - rect.top;
+        ctx.drawImage(canvas, x, y);
+    });
+    
+    // Add watermark/label
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText(currentPair.replace('/', '_') + ' - ICT Analysis', 10, 24);
+    ctx.font = '12px Arial';
+    ctx.fillText(new Date().toLocaleString() + ' | ' + subscriptionType + ' Plan', 10, 42);
+    
+    // Generate filename
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const filename = `${currentPair.replace('/', '_')}_ICT_${timestamp}.png`;
+    
+    // Download
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = exportCanvas.toDataURL('image/png');
+    link.click();
+}
 
 document.getElementById('analyzeBtn').addEventListener('click', analyze);
 document.getElementById('calcLotBtn').addEventListener('click', calculateLot);
@@ -432,6 +490,9 @@ function analyze() {
 }
 
 function updateUI(data) {
+    // Store current pair for chart capture
+    currentPair = data.pair || 'EUR/USD';
+    
     // Weekly Levels
     document.getElementById('pwh').textContent = data.levels?.previous_week_high?.toFixed(5) || '--';
     document.getElementById('pwl').textContent = data.levels?.previous_week_low?.toFixed(5) || '--';
@@ -584,13 +645,23 @@ function updateChart(data) {
         layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
         grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
         rightPriceScale: { borderColor: '#2a2e39' },
-        timeScale: { borderColor: '#2a2e39', timeVisible: true }
+        timeScale: { borderColor: '#2a2e39', timeVisible: true },
+        crosshair: {
+            mode: 0,
+            vertLine: { labelVisible: true },
+            horzLine: { labelVisible: true }
+        }
     });
     
     const candleSeries = chart.addCandlestickSeries({
         upColor: '#26a69a', downColor: '#ef5350',
         borderUpColor: '#26a69a', borderDownColor: '#ef5350',
-        wickUpColor: '#26a69a', wickDownColor: '#ef5350'
+        wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+        priceFormat: {
+            type: 'price',
+            precision: 5,
+            minMove: 0.00001
+        }
     });
     
     const candles = data.ohlc.closes.map((_, i) => ({
