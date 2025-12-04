@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <h2 class="mb-4"><i class="bi bi-gear"></i> Settings</h2>
+            
+            <!-- Telegram Settings -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-telegram"></i> Telegram Alert Settings
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Connect your Telegram bot to receive ICT analysis alerts with chart screenshots.
+                    </p>
+                    
+                    <div class="alert alert-info">
+                        <h6><i class="bi bi-info-circle"></i> How to set up:</h6>
+                        <ol class="mb-0 small">
+                            <li>Open Telegram and search for <strong>@BotFather</strong></li>
+                            <li>Send <code>/newbot</code> and follow instructions to create a bot</li>
+                            <li>Copy the <strong>Bot Token</strong> and paste below</li>
+                            <li>Start a chat with your bot or add it to a group</li>
+                            <li>Get your Chat ID from <strong>@userinfobot</strong> or <strong>@getidsbot</strong></li>
+                        </ol>
+                    </div>
+                    
+                    <form action="{{ url_for('save_telegram_settings') }}" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">Bot Token</label>
+                            <input type="text" name="telegram_bot_token" class="form-control" 
+                                   value="{{ user.telegram_bot_token or '' }}"
+                                   placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz">
+                            <small class="text-muted">From @BotFather when you create the bot</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Chat ID</label>
+                            <input type="text" name="telegram_chat_id" class="form-control" 
+                                   value="{{ user.telegram_chat_id or '' }}"
+                                   placeholder="123456789 or -100123456789">
+                            <small class="text-muted">Your personal chat ID or group chat ID (starts with -100)</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg"></i> Save Telegram Settings
+                        </button>
+                    </form>
+                    
+                    {% if user.telegram_bot_token and user.telegram_chat_id %}
+                    <div class="mt-3 d-flex align-items-center gap-3">
+                        <span class="badge badge-soft-success"><i class="bi bi-check-circle"></i> Telegram Connected</span>
+                        <button id="testTelegramBtn" class="btn btn-sm btn-outline-info" onclick="testTelegram()">
+                            <i class="bi bi-send"></i> Send Test Message
+                        </button>
+                    </div>
+                    <div id="testResult" class="mt-2"></div>
+                    {% else %}
+                    <div class="mt-3">
+                        <span class="badge badge-soft-warning"><i class="bi bi-exclamation-circle"></i> Not Configured</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Account Info -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-person"></i> Account Information
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tr>
+                            <td>Name</td>
+                            <td><strong>{{ user.name }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Email</td>
+                            <td><strong>{{ user.email }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Subscription</td>
+                            <td>
+                                <span class="badge badge-soft-primary">{{ (user.subscription_plan or 'free')|upper }}</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Member Since</td>
+                            <td>{{ user.created_at[:10] if user.created_at else 'N/A' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function testTelegram() {
+    const btn = document.getElementById('testTelegramBtn');
+    const resultDiv = document.getElementById('testResult');
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending...';
+    resultDiv.innerHTML = '';
+    
+    fetch('/test_telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(result => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send"></i> Send Test Message';
+        
+        if (result.success) {
+            resultDiv.innerHTML = '<div class="alert alert-success py-2"><i class="bi bi-check-circle"></i> ' + result.message + '</div>';
+        } else {
+            resultDiv.innerHTML = '<div class="alert alert-danger py-2"><i class="bi bi-x-circle"></i> ' + (result.error || 'Failed to send') + '</div>';
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send"></i> Send Test Message';
+        resultDiv.innerHTML = '<div class="alert alert-danger py-2"><i class="bi bi-x-circle"></i> Error: ' + err.message + '</div>';
+    });
+}
+</script>
+{% endblock %}

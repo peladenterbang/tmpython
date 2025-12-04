@@ -299,9 +299,14 @@
         <div class="card">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-graph-up"></i> Chart</span>
-                <button id="captureBtn" class="btn btn-sm btn-outline-light" onclick="captureChart()" title="Save Chart">
-                    <i class="bi bi-camera"></i> Capture
-                </button>
+                <div>
+                    <button id="telegramBtn" class="btn btn-sm btn-info me-2" onclick="sendToTelegram()" title="Send to Telegram">
+                        <i class="bi bi-telegram"></i> Send Alert
+                    </button>
+                    <button id="captureBtn" class="btn btn-sm btn-outline-light" onclick="captureChart()" title="Save Chart">
+                        <i class="bi bi-camera"></i> Capture
+                    </button>
+                </div>
             </div>
             <div class="card-body p-0" style="height: 400px;">
                 <div id="chart" style="width: 100%; height: 100%;"></div>
@@ -316,6 +321,7 @@
 <script>
 let chart = null;
 let currentPair = 'EUR_USD';
+let lastAnalysisData = null;
 const subscriptionType = '{{ subscription }}';
 
 function captureChart() {
@@ -369,6 +375,85 @@ function captureChart() {
     link.download = filename;
     link.href = exportCanvas.toDataURL('image/png');
     link.click();
+}
+
+function sendToTelegram() {
+    if (!chart || !lastAnalysisData) {
+        alert('Please analyze a pair first');
+        return;
+    }
+    
+    const btn = document.getElementById('telegramBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending...';
+    
+    // Capture chart image
+    const container = document.getElementById('chart');
+    const canvases = container.querySelectorAll('canvas');
+    const rect = container.getBoundingClientRect();
+    
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = rect.width;
+    exportCanvas.height = rect.height;
+    const ctx = exportCanvas.getContext('2d');
+    
+    ctx.fillStyle = '#131722';
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    
+    canvases.forEach(canvas => {
+        const canvasRect = canvas.getBoundingClientRect();
+        const x = canvasRect.left - rect.left;
+        const y = canvasRect.top - rect.top;
+        ctx.drawImage(canvas, x, y);
+    });
+    
+    // Add watermark
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText(currentPair.replace('/', '_') + ' - ICT Analysis', 10, 24);
+    ctx.font = '12px Arial';
+    ctx.fillText(new Date().toLocaleString() + ' | ' + subscriptionType + ' Plan', 10, 42);
+    
+    const imageData = exportCanvas.toDataURL('image/png');
+    
+    // Get trade setup info
+    const setup = lastAnalysisData.trade_setups?.[0] || {};
+    
+    // Send to backend
+    fetch('/send_telegram_alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            pair: currentPair,
+            bias: lastAnalysisData.weekly_bias || 'N/A',
+            confidence: lastAnalysisData.bias?.confidence || 0,
+            current_price: lastAnalysisData.current_price?.toFixed(5) || 'N/A',
+            pwh: lastAnalysisData.levels?.previous_week_high?.toFixed(5) || 'N/A',
+            pwl: lastAnalysisData.levels?.previous_week_low?.toFixed(5) || 'N/A',
+            signal: setup.type || 'WAIT',
+            entry: setup.entry || 'N/A',
+            stop_loss: setup.stop_loss || 'N/A',
+            take_profit: setup.take_profit || 'N/A',
+            risk_reward: setup.risk_reward || 'N/A',
+            image: imageData
+        })
+    })
+    .then(r => r.json())
+    .then(result => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-telegram"></i> Send Alert';
+        
+        if (result.success) {
+            alert('Alert sent to Telegram successfully!');
+        } else {
+            alert('Error: ' + (result.error || 'Failed to send'));
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-telegram"></i> Send Alert';
+        alert('Error: ' + err.message);
+    });
 }
 
 document.getElementById('analyzeBtn').addEventListener('click', analyze);
@@ -490,8 +575,9 @@ function analyze() {
 }
 
 function updateUI(data) {
-    // Store current pair for chart capture
+    // Store current pair and analysis data
     currentPair = data.pair || 'EUR/USD';
+    lastAnalysisData = data;
     
     // Weekly Levels
     document.getElementById('pwh').textContent = data.levels?.previous_week_high?.toFixed(5) || '--';

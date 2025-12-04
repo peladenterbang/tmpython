@@ -186,9 +186,14 @@
         <div class="card mb-3">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-graph-up"></i> Candlestick Chart</span>
-                <button id="captureBtn" class="btn btn-sm btn-outline-light" onclick="captureChart()" title="Save Chart">
-                    <i class="bi bi-camera"></i> Capture
-                </button>
+                <div>
+                    <button id="telegramBtn" class="btn btn-sm btn-info me-2" onclick="sendToTelegram()" title="Send to Telegram">
+                        <i class="bi bi-telegram"></i> Send Alert
+                    </button>
+                    <button id="captureBtn" class="btn btn-sm btn-outline-light" onclick="captureChart()" title="Save Chart">
+                        <i class="bi bi-camera"></i> Capture
+                    </button>
+                </div>
             </div>
             <div class="card-body p-0" style="height: 450px;">
                 <div id="chart" style="width: 100%; height: 100%;"></div>
@@ -232,6 +237,7 @@
 let chart = null;
 let candleSeries = null;
 let currentPair = 'EUR_USD';
+let lastAnalysisData = null;
 const subscriptionType = '{{ subscription }}';
 
 function captureChart() {
@@ -287,6 +293,87 @@ function captureChart() {
     link.click();
 }
 
+function sendToTelegram() {
+    if (!chart || !lastAnalysisData) {
+        alert('Please analyze a pair first');
+        return;
+    }
+    
+    const btn = document.getElementById('telegramBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending...';
+    
+    // Capture chart image
+    const container = document.getElementById('chart');
+    const canvases = container.querySelectorAll('canvas');
+    const rect = container.getBoundingClientRect();
+    
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = rect.width;
+    exportCanvas.height = rect.height;
+    const ctx = exportCanvas.getContext('2d');
+    
+    ctx.fillStyle = '#131722';
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    
+    canvases.forEach(canvas => {
+        const canvasRect = canvas.getBoundingClientRect();
+        const x = canvasRect.left - rect.left;
+        const y = canvasRect.top - rect.top;
+        ctx.drawImage(canvas, x, y);
+    });
+    
+    // Add watermark
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText(currentPair.replace('/', '_') + ' - ML Predict', 10, 24);
+    ctx.font = '12px Arial';
+    ctx.fillText(new Date().toLocaleString() + ' | ' + subscriptionType + ' Plan', 10, 42);
+    
+    const imageData = exportCanvas.toDataURL('image/png');
+    
+    // Get prediction info
+    const pred = lastAnalysisData.predictions?.[0] || {};
+    const features = lastAnalysisData.features || {};
+    
+    // Send to backend
+    fetch('/send_ml_telegram_alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            pair: currentPair,
+            signal: pred.direction || 'WAIT',
+            confidence: pred.confidence || 0,
+            current_price: features.current_price || 'N/A',
+            entry: pred.entry || 'N/A',
+            stop_loss: pred.stop_loss || 'N/A',
+            take_profit: pred.take_profit || 'N/A',
+            risk_reward: pred.risk_reward || 'N/A',
+            lots: pred.lots || 'N/A',
+            trend_score: features.trend_score || 0,
+            rsi: features.rsi || 'N/A',
+            reason: pred.reason || 'N/A',
+            image: imageData
+        })
+    })
+    .then(r => r.json())
+    .then(result => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-telegram"></i> Send Alert';
+        
+        if (result.success) {
+            alert('Alert sent to Telegram successfully!');
+        } else {
+            alert('Error: ' + (result.error || 'Failed to send'));
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-telegram"></i> Send Alert';
+        alert('Error: ' + err.message);
+    });
+}
+
 document.getElementById('analyzeBtn').addEventListener('click', runAnalysis);
 
 async function runAnalysis() {
@@ -324,8 +411,9 @@ async function runAnalysis() {
 }
 
 function displayResults(data) {
-    // Store current pair for chart capture
+    // Store current pair and analysis data
     currentPair = data.pair || 'EUR/USD';
+    lastAnalysisData = data;
     
     // Trend Score
     const trendScore = data.features.trend_score;

@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 import yfinance as yf
 import hashlib
 import os
+import requests
+import base64
+import io
 
 from indicators import (
     calculate_sma, calculate_ema, calculate_rsi, 
@@ -82,6 +85,10 @@ FOREX_TICKERS = {
 app = Flask(__name__)
 app.secret_key = 'forex-risk-manager-secret-key-2024'
 DATABASE = 'database.db'
+
+# Telegram Configuration (User can set their own bot token and chat ID)
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 # Subscription Plans
 SUBSCRIPTION_PLANS = {
@@ -295,6 +302,73 @@ def logout():
 def subscription():
     user = get_current_user()
     return render_template('subscription.html', plans=SUBSCRIPTION_PLANS, user=user)
+
+
+@app.route('/settings')
+@login_required
+def settings():
+    user = get_current_user()
+    return render_template('settings.html', user=user)
+
+
+@app.route('/save_telegram_settings', methods=['POST'])
+@login_required
+def save_telegram_settings():
+    bot_token = request.form.get('telegram_bot_token', '').strip()
+    chat_id = request.form.get('telegram_chat_id', '').strip()
+    
+    conn = get_db()
+    conn.execute('UPDATE users SET telegram_bot_token = ?, telegram_chat_id = ? WHERE id = ?',
+                (bot_token, chat_id, session['user_id']))
+    conn.commit()
+    conn.close()
+    
+    flash('Telegram settings saved successfully!', 'success')
+    return redirect(url_for('settings'))
+
+
+@app.route('/test_telegram', methods=['POST'])
+@login_required
+def test_telegram():
+    """Send a test message to Telegram"""
+    try:
+        conn = get_db()
+        user = conn.execute('SELECT telegram_bot_token, telegram_chat_id, name, subscription_plan FROM users WHERE id = ?', 
+                           (session['user_id'],)).fetchone()
+        conn.close()
+        
+        bot_token = user['telegram_bot_token'] if user else None
+        chat_id = user['telegram_chat_id'] if user else None
+        
+        if not bot_token or not chat_id:
+            return jsonify({'error': 'Telegram not configured. Please set Bot Token and Chat ID first.'}), 400
+        
+        # Send test message
+        message = f"""
+✅ *TELEGRAM TEST SUCCESSFUL*
+━━━━━━━━━━━━━━━━━━
+
+👤 *User:* {user['name']}
+📊 *Plan:* {(user['subscription_plan'] or 'free').upper()}
+⏰ *Time:* {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Your Telegram alerts are working! 🎉
+You will receive ICT analysis alerts here.
+"""
+        
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload = {'chat_id': chat_id, 'text': message, 'parse_mode': 'Markdown'}
+        
+        response = requests.post(url, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            return jsonify({'success': True, 'message': 'Test message sent successfully!'})
+        else:
+            error_data = response.json()
+            return jsonify({'error': f"Telegram error: {error_data.get('description', 'Unknown error')}"}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/subscribe/<plan>', methods=['POST'])
@@ -548,9 +622,21 @@ def init_db():
             is_admin INTEGER DEFAULT 0,
             subscription_plan VARCHAR(20) DEFAULT 'free',
             subscription_expires TIMESTAMP,
+            telegram_bot_token VARCHAR(100),
+            telegram_chat_id VARCHAR(50),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    
+    # Add Telegram columns if they don't exist (for existing databases)
+    try:
+        conn.execute('ALTER TABLE users ADD COLUMN telegram_bot_token VARCHAR(100)')
+    except:
+        pass
+    try:
+        conn.execute('ALTER TABLE users ADD COLUMN telegram_chat_id VARCHAR(50)')
+    except:
+        pass
     
     # Payments table
     conn.execute('''
@@ -1167,6 +1253,197 @@ def analyze_ict_route():
     except Exception as e:
         import traceback
         return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+@app.route('/send_telegram_alert', methods=['POST'])
+@login_required
+def send_telegram_alert():
+    """Send ICT analysis alert to Telegram with chart"""
+    try:
+        data = request.get_json()
+        
+        # Get user's Telegram settings
+        conn = get_db()
+        user = conn.execute('SELECT telegram_bot_token, telegram_chat_id, subscription_plan FROM users WHERE id = ?', 
+                           (session['user_id'],)).fetchone()
+        conn.close()
+        
+        bot_token = user['telegram_bot_token'] if user and user['telegram_bot_token'] else TELEGRAM_BOT_TOKEN
+        chat_id = user['telegram_chat_id'] if user and user['telegram_chat_id'] else TELEGRAM_CHAT_ID
+        
+        if not bot_token or not chat_id:
+            return jsonify({'error': 'Telegram not configured. Please set your Bot Token and Chat ID in settings.'}), 400
+        
+        # Build the message
+        pair = data.get('pair', 'N/A')
+        bias = data.get('bias', 'N/A')
+        confidence = data.get('confidence', 0)
+        current_price = data.get('current_price', 'N/A')
+        pwh = data.get('pwh', 'N/A')
+        pwl = data.get('pwl', 'N/A')
+        signal = data.get('signal', 'N/A')
+        entry = data.get('entry', 'N/A')
+        sl = data.get('stop_loss', 'N/A')
+        tp = data.get('take_profit', 'N/A')
+        rr = data.get('risk_reward', 'N/A')
+        subscription = (user['subscription_plan'] or 'free').upper() if user else 'FREE'
+        
+        # Format message
+        message = f"""
+🔔 *ICT ANALYSIS ALERT*
+━━━━━━━━━━━━━━━━━━
+
+📊 *Pair:* `{pair}`
+📈 *Bias:* `{bias}` ({confidence}%)
+💰 *Current Price:* `{current_price}`
+
+📉 *Weekly Levels:*
+   • PWH: `{pwh}`
+   • PWL: `{pwl}`
+
+🎯 *Trade Setup:*
+   • Signal: `{signal}`
+   • Entry: `{entry}`
+   • Stop Loss: `{sl}`
+   • Take Profit: `{tp}`
+   • Risk/Reward: `{rr}`
+
+━━━━━━━━━━━━━━━━━━
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+👤 {subscription} Plan
+"""
+        
+        # Check if image data is provided
+        image_data = data.get('image')
+        
+        if image_data:
+            # Remove data URL prefix if present
+            if ',' in image_data:
+                image_data = image_data.split(',')[1]
+            
+            # Decode base64 image
+            image_bytes = base64.b64decode(image_data)
+            
+            # Send photo with caption
+            url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
+            files = {'photo': ('chart.png', io.BytesIO(image_bytes), 'image/png')}
+            payload = {'chat_id': chat_id, 'caption': message, 'parse_mode': 'Markdown'}
+            
+            response = requests.post(url, data=payload, files=files, timeout=30)
+        else:
+            # Send text only
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {'chat_id': chat_id, 'text': message, 'parse_mode': 'Markdown'}
+            
+            response = requests.post(url, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            return jsonify({'success': True, 'message': 'Alert sent to Telegram!'})
+        else:
+            return jsonify({'error': f'Telegram API error: {response.text}'}), 400
+            
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+@app.route('/send_ml_telegram_alert', methods=['POST'])
+@login_required
+def send_ml_telegram_alert():
+    """Send ML Predict analysis alert to Telegram with chart"""
+    try:
+        data = request.get_json()
+        
+        # Get user's Telegram settings
+        conn = get_db()
+        user = conn.execute('SELECT telegram_bot_token, telegram_chat_id, subscription_plan FROM users WHERE id = ?', 
+                           (session['user_id'],)).fetchone()
+        conn.close()
+        
+        bot_token = user['telegram_bot_token'] if user and user['telegram_bot_token'] else TELEGRAM_BOT_TOKEN
+        chat_id = user['telegram_chat_id'] if user and user['telegram_chat_id'] else TELEGRAM_CHAT_ID
+        
+        if not bot_token or not chat_id:
+            return jsonify({'error': 'Telegram not configured. Please set your Bot Token and Chat ID in settings.'}), 400
+        
+        # Build the message
+        pair = data.get('pair', 'N/A')
+        signal = data.get('signal', 'WAIT')
+        confidence = data.get('confidence', 0)
+        current_price = data.get('current_price', 'N/A')
+        entry = data.get('entry', 'N/A')
+        sl = data.get('stop_loss', 'N/A')
+        tp = data.get('take_profit', 'N/A')
+        rr = data.get('risk_reward', 'N/A')
+        lots = data.get('lots', 'N/A')
+        trend_score = data.get('trend_score', 0)
+        rsi = data.get('rsi', 'N/A')
+        reason = data.get('reason', 'N/A')
+        subscription = (user['subscription_plan'] or 'free').upper() if user else 'FREE'
+        
+        # Signal emoji
+        signal_emoji = '🟢' if signal == 'BUY' else '🔴' if signal == 'SELL' else '🟡'
+        
+        # Format message
+        message = f"""
+🤖 *ML PREDICT ALERT*
+━━━━━━━━━━━━━━━━━━
+
+📊 *Pair:* `{pair}`
+{signal_emoji} *Signal:* `{signal}` ({confidence}%)
+💰 *Current Price:* `{current_price}`
+
+📈 *Indicators:*
+   • Trend Score: `{trend_score}`
+   • RSI: `{rsi}`
+
+🎯 *Trade Setup:*
+   • Entry: `{entry}`
+   • Stop Loss: `{sl}`
+   • Take Profit: `{tp}`
+   • Risk/Reward: `{rr}`
+   • Lot Size: `{lots}`
+
+📝 *Reason:* _{reason}_
+
+━━━━━━━━━━━━━━━━━━
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+👤 {subscription} Plan
+"""
+        
+        # Check if image data is provided
+        image_data = data.get('image')
+        
+        if image_data:
+            # Remove data URL prefix if present
+            if ',' in image_data:
+                image_data = image_data.split(',')[1]
+            
+            # Decode base64 image
+            image_bytes = base64.b64decode(image_data)
+            
+            # Send photo with caption
+            url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
+            files = {'photo': ('chart.png', io.BytesIO(image_bytes), 'image/png')}
+            payload = {'chat_id': chat_id, 'caption': message, 'parse_mode': 'Markdown'}
+            
+            response = requests.post(url, data=payload, files=files, timeout=30)
+        else:
+            # Send text only
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {'chat_id': chat_id, 'text': message, 'parse_mode': 'Markdown'}
+            
+            response = requests.post(url, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            return jsonify({'success': True, 'message': 'Alert sent to Telegram!'})
+        else:
+            return jsonify({'error': f'Telegram API error: {response.text}'}), 400
+            
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
 
 @app.route('/ml_predict')
 @login_required
