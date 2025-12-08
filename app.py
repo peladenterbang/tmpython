@@ -7,6 +7,12 @@ import os
 import requests
 import base64
 import io
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch, cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
 from indicators import (
     calculate_sma, calculate_ema, calculate_rsi, 
@@ -18,6 +24,16 @@ from ml_predictor import predict_forex
 from arima_predictor import (
     get_arima_prediction, calculate_arima_metrics,
     calculate_forecast_confidence, backtest_arima, get_trading_signal
+)
+from trading_strategies import (
+    MeanReversionStrategy, MomentumStrategy, BreakoutStrategy,
+    VolatilityBreakoutStrategy, EnsembleStrategy, analyze_all_strategies
+)
+from auto_execution import AutoExecutor, get_execution_signals, simulate_auto_portfolio
+from auto_scheduler import (
+    init_auto_tables, start_scheduler, get_user_stats, get_user_executions,
+    get_user_logs, get_user_settings, save_user_settings, scan_markets_for_user,
+    log_action, get_current_price, close_position
 )
 
 # Yahoo Finance ticker symbols for forex pairs
@@ -929,15 +945,6 @@ def delete_trade(trade_id):
     conn.close()
     return redirect(url_for('index'))
 
-@app.route('/trades')
-@login_required
-def trades():
-    conn = get_db()
-    trades = conn.execute('SELECT * FROM trades WHERE user_id = ? ORDER BY created_at DESC', 
-                         (session['user_id'],)).fetchall()
-    conn.close()
-    return render_template('trades.html', trades=trades)
-
 @app.route('/prediction')
 @login_required
 def prediction():
@@ -1657,6 +1664,693 @@ def analyze_arima():
         return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
+@app.route('/generate_macro_report', methods=['POST'])
+@login_required
+@subscription_required('pro')
+def generate_macro_report():
+    """Generate Macroeconomic Review PDF Report"""
+    try:
+        data = request.get_json()
+        pair = data.get('pair', 'EUR/USD')
+        chart_image = data.get('chart_image')  # Base64 chart image
+        
+        # Get user info
+        user = get_current_user()
+        
+        # Fetch economic data from Yahoo Finance
+        ticker_symbol = FOREX_TICKERS.get(pair)
+        if not ticker_symbol:
+            return jsonify({'error': f'Unknown pair: {pair}'}), 400
+        
+        # Get historical data for analysis
+        ticker = yf.Ticker(ticker_symbol)
+        df_daily = ticker.history(period='6mo', interval='1d')
+        df_weekly = ticker.history(period='2y', interval='1wk')
+        
+        if df_daily.empty:
+            return jsonify({'error': 'No data available'}), 400
+        
+        closes_daily = df_daily['Close'].tolist()
+        closes_weekly = df_weekly['Close'].tolist()
+        
+        # Fetch major indices for macro context
+        indices_data = {}
+        indices = {
+            'DXY': 'DX-Y.NYB',  # US Dollar Index
+            'Gold': 'GC=F',
+            'Oil': 'CL=F',
+            'S&P500': '^GSPC',
+            'VIX': '^VIX'
+        }
+        
+        for name, symbol in indices.items():
+            try:
+                idx = yf.Ticker(symbol)
+                hist = idx.history(period='1mo')
+                if not hist.empty:
+                    current = hist['Close'].iloc[-1]
+                    prev = hist['Close'].iloc[0]
+                    change_pct = ((current - prev) / prev) * 100
+                    indices_data[name] = {
+                        'current': round(current, 2),
+                        'change': round(change_pct, 2)
+                    }
+            except:
+                pass
+        
+        # Calculate technical metrics
+        from arima_predictor import get_arima_prediction, get_trading_signal, backtest_arima
+        
+        predictions, _ = get_arima_prediction(closes_daily, periods=5)
+        signal = get_trading_signal(closes_daily, predictions)
+        backtest, _ = backtest_arima(closes_daily)
+        
+        # Calculate additional metrics
+        current_price = closes_daily[-1]
+        price_1w = closes_daily[-5] if len(closes_daily) >= 5 else closes_daily[0]
+        price_1m = closes_daily[-22] if len(closes_daily) >= 22 else closes_daily[0]
+        price_3m = closes_daily[-66] if len(closes_daily) >= 66 else closes_daily[0]
+        
+        change_1w = ((current_price - price_1w) / price_1w) * 100
+        change_1m = ((current_price - price_1m) / price_1m) * 100
+        change_3m = ((current_price - price_3m) / price_3m) * 100
+        
+        # Calculate volatility
+        import numpy as np
+        returns = np.diff(closes_daily) / closes_daily[:-1]
+        volatility = np.std(returns) * np.sqrt(252) * 100  # Annualized
+        
+        # Support/Resistance levels
+        high_3m = max(closes_daily[-66:]) if len(closes_daily) >= 66 else max(closes_daily)
+        low_3m = min(closes_daily[-66:]) if len(closes_daily) >= 66 else min(closes_daily)
+        
+        # Generate PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1*cm, bottomMargin=1*cm)
+        
+        styles = getSampleStyleSheet()
+        styles.add(ParagraphStyle(name='MainTitle', fontSize=22, spaceAfter=10, alignment=TA_CENTER, textColor=colors.HexColor('#1a365d')))
+        styles.add(ParagraphStyle(name='SectionTitle', fontSize=12, spaceAfter=4, spaceBefore=8, textColor=colors.HexColor('#2c5282'), fontName='Helvetica-Bold'))
+        styles.add(ParagraphStyle(name='SubTitle', fontSize=10, spaceAfter=4, textColor=colors.HexColor('#4a5568'), fontName='Helvetica-Bold'))
+        styles.add(ParagraphStyle(name='CustomBody', fontSize=9, spaceAfter=3, textColor=colors.HexColor('#2d3748')))
+        styles.add(ParagraphStyle(name='SmallText', fontSize=8, textColor=colors.HexColor('#718096')))
+        styles.add(ParagraphStyle(name='Disclaimer', fontSize=7, textColor=colors.HexColor('#a0aec0'), alignment=TA_CENTER))
+        
+        elements = []
+        
+        # Header
+        elements.append(Paragraph("MACROECONOMIC REVIEW", styles['MainTitle']))
+        elements.append(Paragraph(f"{pair} Analysis Report", styles['SubTitle']))
+        elements.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | User: {user['name']} | Plan: {(user['subscription_plan'] or 'free').upper()}", styles['SmallText']))
+        elements.append(Spacer(1, 10))
+        
+        # Executive Summary
+        elements.append(Paragraph("1. EXECUTIVE SUMMARY", styles['SectionTitle']))
+        
+        signal_text = signal.get('direction', 'NEUTRAL')
+        signal_color = '#38a169' if signal_text == 'BUY' else '#e53e3e' if signal_text == 'SELL' else '#d69e2e'
+        
+        summary = f"""
+        <b>Current Price:</b> {current_price:.5f}<br/>
+        <b>Trading Signal:</b> <font color="{signal_color}"><b>{signal_text}</b></font> (Confidence: {signal.get('confidence', 0)}%)<br/>
+        <b>Trend:</b> {signal.get('trend', 'N/A')}<br/>
+        <b>Annualized Volatility:</b> {volatility:.2f}%<br/>
+        """
+        elements.append(Paragraph(summary, styles['CustomBody']))
+        elements.append(Spacer(1, 5))
+        
+        # Add Chart Image if provided
+        if chart_image:
+            try:
+                # Remove data URL prefix if present
+                if ',' in chart_image:
+                    chart_image = chart_image.split(',')[1]
+                
+                # Decode base64 image
+                chart_bytes = base64.b64decode(chart_image)
+                chart_buffer = io.BytesIO(chart_bytes)
+                
+                # Add chart to PDF
+                elements.append(Paragraph("PRICE CHART", styles['SectionTitle']))
+                chart_img = Image(chart_buffer, width=14*cm, height=6*cm)
+                chart_img.hAlign = 'CENTER'
+                elements.append(chart_img)
+                elements.append(Spacer(1, 8))
+            except Exception as e:
+                pass  # Skip chart if error
+        
+        # Price Performance Table
+        elements.append(Paragraph("2. PRICE PERFORMANCE", styles['SectionTitle']))
+        
+        perf_data = [
+            ['Period', 'Price', 'Change %'],
+            ['Current', f'{current_price:.5f}', '-'],
+            ['1 Week Ago', f'{price_1w:.5f}', f'{change_1w:+.2f}%'],
+            ['1 Month Ago', f'{price_1m:.5f}', f'{change_1m:+.2f}%'],
+            ['3 Months Ago', f'{price_3m:.5f}', f'{change_3m:+.2f}%'],
+        ]
+        
+        perf_table = Table(perf_data, colWidths=[3*cm, 4*cm, 3*cm])
+        perf_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c5282')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#edf2f7')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e0')),
+        ]))
+        elements.append(perf_table)
+        elements.append(Spacer(1, 8))
+        
+        # Key Levels
+        elements.append(Paragraph("3. KEY TECHNICAL LEVELS", styles['SectionTitle']))
+        
+        levels_data = [
+            ['Level Type', 'Price'],
+            ['3-Month High (Resistance)', f'{high_3m:.5f}'],
+            ['3-Month Low (Support)', f'{low_3m:.5f}'],
+            ['Entry Point', f'{signal.get("entry", "N/A")}'],
+            ['Stop Loss', f'{signal.get("stop_loss", "N/A")}'],
+            ['Take Profit', f'{signal.get("take_profit", "N/A")}'],
+        ]
+        
+        levels_table = Table(levels_data, colWidths=[5*cm, 5*cm])
+        levels_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c5282')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#edf2f7')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e0')),
+        ]))
+        elements.append(levels_table)
+        elements.append(Spacer(1, 8))
+        
+        # Market Context
+        elements.append(Paragraph("4. MARKET CONTEXT (Macro Indicators)", styles['SectionTitle']))
+        
+        if indices_data:
+            macro_data = [['Indicator', 'Current', 'Monthly Change']]
+            for name, vals in indices_data.items():
+                change_color = 'green' if vals['change'] >= 0 else 'red'
+                macro_data.append([name, f"{vals['current']}", f"{vals['change']:+.2f}%"])
+            
+            macro_table = Table(macro_data, colWidths=[4*cm, 3*cm, 3*cm])
+            macro_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c5282')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#edf2f7')),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e0')),
+            ]))
+            elements.append(macro_table)
+        else:
+            elements.append(Paragraph("Market data temporarily unavailable.", styles['CustomBody']))
+        elements.append(Spacer(1, 8))
+        
+        # Page break before ARIMA Forecast
+        elements.append(PageBreak())
+        
+        # ARIMA Forecast
+        elements.append(Paragraph("5. ARIMA FORECAST (5-Day Projection)", styles['SectionTitle']))
+        
+        if predictions:
+            forecast_data = [['Day', 'Predicted Price', 'Direction']]
+            for i, pred in enumerate(predictions[:5], 1):
+                direction = '↑' if pred > current_price else '↓' if pred < current_price else '→'
+                forecast_data.append([f'Day {i}', f'{pred:.5f}', direction])
+            
+            forecast_table = Table(forecast_data, colWidths=[3*cm, 4*cm, 3*cm])
+            forecast_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c5282')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#edf2f7')),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e0')),
+            ]))
+            elements.append(forecast_table)
+        elements.append(Spacer(1, 8))
+        
+        # Backtest Results
+        elements.append(Paragraph("6. MODEL PERFORMANCE (Backtest)", styles['SectionTitle']))
+        
+        if backtest:
+            bt_text = f"""
+            <b>Direction Accuracy:</b> {backtest.get('accuracy', 0):.1f}%<br/>
+            <b>RMSE:</b> {backtest.get('rmse', 0):.5f}<br/>
+            <b>MAPE:</b> {backtest.get('mape', 0):.2f}%<br/>
+            <b>Test Period:</b> {backtest.get('test_size', 0)} candles<br/>
+            """
+            elements.append(Paragraph(bt_text, styles['CustomBody']))
+        elements.append(Spacer(1, 8))
+        
+        # Analysis & Recommendation
+        elements.append(Paragraph("7. ANALYSIS & RECOMMENDATION", styles['SectionTitle']))
+        
+        # Generate analysis text based on data
+        if signal_text == 'BUY':
+            analysis = f"""
+            Based on our ARIMA model analysis, {pair} shows <b>bullish momentum</b>. 
+            The price is trending upward with a {signal.get('confidence', 0)}% confidence level.
+            Key support at {low_3m:.5f} provides a solid floor, while resistance at {high_3m:.5f} 
+            is the next target. Consider entering long positions with proper risk management.
+            """
+        elif signal_text == 'SELL':
+            analysis = f"""
+            Based on our ARIMA model analysis, {pair} shows <b>bearish pressure</b>. 
+            The price is trending downward with a {signal.get('confidence', 0)}% confidence level.
+            Key resistance at {high_3m:.5f} caps upside, while support at {low_3m:.5f} 
+            is the next target. Consider short positions with proper risk management.
+            """
+        else:
+            analysis = f"""
+            Based on our ARIMA model analysis, {pair} is in a <b>consolidation phase</b>. 
+            The market shows mixed signals with no clear directional bias.
+            Wait for a breakout above {high_3m:.5f} for bullish confirmation, 
+            or below {low_3m:.5f} for bearish confirmation. Avoid trading until clearer signals emerge.
+            """
+        
+        elements.append(Paragraph(analysis, styles['CustomBody']))
+        elements.append(Spacer(1, 10))
+        
+        # Disclaimer
+        elements.append(Paragraph("─" * 60, styles['SmallText']))
+        elements.append(Paragraph(
+            "DISCLAIMER: This report is for educational purposes only and does not constitute financial advice. "
+            "Trading forex involves significant risk of loss. Past performance is not indicative of future results. "
+            "Always conduct your own research and consult with a licensed financial advisor before making investment decisions.",
+            styles['Disclaimer']
+        ))
+        
+        # Build PDF
+        doc.build(elements)
+        
+        # Get PDF content
+        pdf_content = buffer.getvalue()
+        buffer.close()
+        
+        # Return PDF as base64
+        pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
+        
+        return jsonify({
+            'success': True,
+            'pdf': pdf_base64,
+            'filename': f'{pair.replace("/", "_")}_Macro_Report_{datetime.now().strftime("%Y%m%d")}.pdf'
+        })
+        
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+@app.route('/strategies')
+@login_required
+@subscription_required('pro')
+def strategies_page():
+    """Jim Simons Inspired Trading Strategies Page"""
+    conn = get_db()
+    account = conn.execute('SELECT * FROM account WHERE user_id = ?', (session['user_id'],)).fetchone()
+    user = conn.execute('SELECT subscription_plan FROM users WHERE id = ?', (session['user_id'],)).fetchone()
+    conn.close()
+    balance = account['current_balance'] if account else 10000
+    subscription = (user['subscription_plan'] or 'free').upper() if user else 'FREE'
+    return render_template('strategies.html', balance=balance, subscription=subscription)
+
+
+@app.route('/analyze_strategies', methods=['POST'])
+@login_required
+def analyze_strategies_route():
+    """
+    Analyze using Jim Simons inspired quantitative strategies
+    """
+    data = request.get_json()
+    pair = data.get('pair', 'EUR/USD')
+    period = data.get('period', '1mo')
+    interval = data.get('interval', '1h')
+    balance = float(data.get('balance', 10000))
+    risk_percent = float(data.get('risk_percent', 1.0))
+    strategy = data.get('strategy', 'ensemble')  # Which strategy to use
+    
+    ticker_symbol = FOREX_TICKERS.get(pair)
+    if not ticker_symbol:
+        return jsonify({'error': f'Unknown pair: {pair}'}), 400
+    
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        df = ticker.history(period=period, interval=interval)
+        
+        if df.empty:
+            return jsonify({'error': 'No data available'}), 400
+        
+        opens = df['Open'].tolist()
+        highs = df['High'].tolist()
+        lows = df['Low'].tolist()
+        closes = df['Close'].tolist()
+        dates = df.index.strftime('%Y-%m-%d %H:%M').tolist()
+        
+        if len(closes) < 50:
+            return jsonify({'error': 'Not enough data (need at least 50 candles)'}), 400
+        
+        # Run selected strategy
+        if strategy == 'all':
+            result = analyze_all_strategies(opens, highs, lows, closes, balance, risk_percent)
+        elif strategy == 'mean_reversion':
+            strat = MeanReversionStrategy()
+            result = strat.analyze(opens, highs, lows, closes, balance, risk_percent)
+        elif strategy == 'momentum':
+            strat = MomentumStrategy()
+            result = strat.analyze(opens, highs, lows, closes, balance, risk_percent)
+        elif strategy == 'breakout':
+            strat = BreakoutStrategy()
+            result = strat.analyze(opens, highs, lows, closes, balance, risk_percent)
+        elif strategy == 'volatility':
+            strat = VolatilityBreakoutStrategy()
+            result = strat.analyze(opens, highs, lows, closes, balance, risk_percent)
+        else:  # ensemble (default)
+            strat = EnsembleStrategy()
+            result = strat.analyze(opens, highs, lows, closes, balance, risk_percent)
+        
+        # Add chart data
+        result['pair'] = pair
+        result['dates'] = dates
+        result['ohlc'] = {
+            'opens': opens,
+            'highs': highs,
+            'lows': lows,
+            'closes': closes
+        }
+        result['period'] = period
+        result['interval'] = interval
+        result['analyzed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+@app.route('/send_strategy_telegram_alert', methods=['POST'])
+@login_required
+def send_strategy_telegram_alert():
+    """Send Strategy analysis alert to Telegram"""
+    try:
+        data = request.get_json()
+        
+        conn = get_db()
+        user = conn.execute('SELECT telegram_bot_token, telegram_chat_id, subscription_plan FROM users WHERE id = ?', 
+                           (session['user_id'],)).fetchone()
+        conn.close()
+        
+        bot_token = user['telegram_bot_token'] if user and user['telegram_bot_token'] else TELEGRAM_BOT_TOKEN
+        chat_id = user['telegram_chat_id'] if user and user['telegram_chat_id'] else TELEGRAM_CHAT_ID
+        
+        if not bot_token or not chat_id:
+            return jsonify({'error': 'Telegram not configured. Please set your Bot Token and Chat ID in settings.'}), 400
+        
+        pair = data.get('pair', 'N/A')
+        strategy_name = data.get('strategy', 'Ensemble')
+        signal = data.get('signal', 'WAIT')
+        confidence = data.get('confidence', 0)
+        current_price = data.get('current_price', 'N/A')
+        entry = data.get('entry', 'N/A')
+        sl = data.get('stop_loss', 'N/A')
+        tp = data.get('take_profit', 'N/A')
+        rr = data.get('risk_reward', 'N/A')
+        reason = data.get('reason', 'N/A')
+        subscription = (user['subscription_plan'] or 'free').upper() if user else 'FREE'
+        
+        signal_emoji = '🟢' if signal == 'BUY' else '🔴' if signal == 'SELL' else '🟡'
+        
+        message = f"""
+🧠 *QUANT STRATEGY ALERT*
+━━━━━━━━━━━━━━━━━━
+
+📊 *Pair:* `{pair}`
+📈 *Strategy:* `{strategy_name}`
+{signal_emoji} *Signal:* `{signal}` ({confidence}%)
+💰 *Current Price:* `{current_price}`
+
+🎯 *Trade Setup:*
+   • Entry: `{entry}`
+   • Stop Loss: `{sl}`
+   • Take Profit: `{tp}`
+   • Risk/Reward: `{rr}`
+
+📝 *Reason:* _{reason}_
+
+━━━━━━━━━━━━━━━━━━
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+👤 {subscription} Plan
+"""
+        
+        image_data = data.get('image')
+        
+        if image_data:
+            if ',' in image_data:
+                image_data = image_data.split(',')[1]
+            
+            image_bytes = base64.b64decode(image_data)
+            
+            url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
+            files = {'photo': ('chart.png', io.BytesIO(image_bytes), 'image/png')}
+            payload = {'chat_id': chat_id, 'caption': message, 'parse_mode': 'Markdown'}
+            
+            response = requests.post(url, data=payload, files=files, timeout=30)
+        else:
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {'chat_id': chat_id, 'text': message, 'parse_mode': 'Markdown'}
+            
+            response = requests.post(url, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            return jsonify({'success': True, 'message': 'Alert sent to Telegram!'})
+        else:
+            return jsonify({'error': f'Telegram API error: {response.text}'}), 400
+            
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+@app.route('/auto_execution')
+@login_required
+@subscription_required('pro')
+def auto_execution_page():
+    """Auto Execution Portfolio Page"""
+    user_id = session['user_id']
+    
+    conn = get_db()
+    account = conn.execute('SELECT * FROM account WHERE user_id = ?', (user_id,)).fetchone()
+    conn.close()
+    
+    balance = account['current_balance'] if account else 10000
+    
+    # Get user stats, settings, executions, and logs
+    stats = get_user_stats(user_id)
+    settings = get_user_settings(user_id)
+    executions = get_user_executions(user_id, 50)
+    logs = get_user_logs(user_id, 50)
+    
+    # Get open positions
+    open_positions = [e for e in executions if e.get('status') == 'open']
+    
+    return render_template('auto_execution.html', 
+                          balance=balance,
+                          stats=stats,
+                          settings=settings,
+                          executions=executions,
+                          open_positions=open_positions,
+                          logs=logs)
+
+
+@app.route('/scan_execution', methods=['POST'])
+@login_required
+def scan_execution():
+    """Scan markets for execution signals"""
+    data = request.get_json()
+    pairs = data.get('pairs', ['EUR/USD'])
+    period = data.get('period', '1mo')
+    interval = data.get('interval', '1h')
+    balance = float(data.get('balance', 10000))
+    risk_percent = float(data.get('risk_percent', 1.0))
+    
+    pairs_dict = {}
+    for pair in pairs:
+        if pair in FOREX_TICKERS:
+            pairs_dict[pair] = FOREX_TICKERS[pair]
+    
+    if not pairs_dict:
+        return jsonify({'error': 'No valid pairs selected'}), 400
+    
+    try:
+        signals = get_execution_signals(pairs_dict, period, interval, balance, risk_percent)
+        return jsonify({
+            'signals': signals,
+            'total': len(signals),
+            'scanned_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+@app.route('/simulate_portfolio', methods=['POST'])
+@login_required
+def simulate_portfolio_route():
+    """Simulate portfolio performance"""
+    data = request.get_json()
+    initial_balance = float(data.get('initial_balance', 10000))
+    risk_percent = float(data.get('risk_percent', 1.0))
+    period = data.get('period', '3mo')
+    
+    try:
+        result = simulate_auto_portfolio(initial_balance, risk_percent, period)
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+@app.route('/save_auto_settings', methods=['POST'])
+@login_required
+def save_auto_settings():
+    """Save auto execution settings for user"""
+    data = request.get_json()
+    user_id = session['user_id']
+    
+    try:
+        save_user_settings(user_id, data)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/trigger_manual_scan', methods=['POST'])
+@login_required
+def trigger_manual_scan():
+    """Trigger a manual market scan"""
+    user_id = session['user_id']
+    
+    try:
+        scan_markets_for_user(user_id)
+        return jsonify({'success': True, 'message': 'Scan completed'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/execute_auto_trade', methods=['POST'])
+@login_required
+def execute_auto_trade():
+    """Execute a trade manually from scan results"""
+    data = request.get_json()
+    user_id = session['user_id']
+    
+    try:
+        conn = get_db()
+        
+        # Insert the trade
+        conn.execute('''
+            INSERT INTO auto_executions 
+            (user_id, pair, direction, entry_price, current_price, stop_loss, take_profit, lots, probability, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
+        ''', (
+            user_id,
+            data.get('pair'),
+            data.get('direction'),
+            data.get('entry'),
+            data.get('entry'),
+            data.get('stop_loss'),
+            data.get('take_profit'),
+            data.get('lots', 0.01),
+            data.get('probability', 0)
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        log_action(user_id, 'MANUAL_TRADE_EXECUTED', data.get('pair'),
+                  f"{data.get('direction')} @ {data.get('entry')}")
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/close_auto_position/<int:position_id>', methods=['POST'])
+@login_required
+def close_auto_position(position_id):
+    """Close an open position manually"""
+    user_id = session['user_id']
+    
+    try:
+        conn = get_db()
+        
+        # Get the position
+        position = conn.execute('''
+            SELECT * FROM auto_executions WHERE id = ? AND user_id = ?
+        ''', (position_id, user_id)).fetchone()
+        
+        if not position:
+            conn.close()
+            return jsonify({'error': 'Position not found'}), 404
+        
+        # Get current price
+        current_price = get_current_price(position['pair'])
+        if current_price is None:
+            current_price = position['current_price'] or position['entry_price']
+        
+        direction = position['direction']
+        entry_price = position['entry_price']
+        lots = position['lots']
+        
+        # Determine if direction was correct
+        if direction == 'BUY':
+            is_correct = 1 if current_price > entry_price else 0
+            pnl_pips = (current_price - entry_price) / entry_price * 10000
+        else:
+            is_correct = 1 if current_price < entry_price else 0
+            pnl_pips = (entry_price - current_price) / entry_price * 10000
+        
+        # Calculate P&L
+        lot_value = lots * 100000
+        pnl = round(pnl_pips * lot_value / 10000, 2)
+        
+        # Update position
+        conn.execute('''
+            UPDATE auto_executions 
+            SET status = 'closed', exit_price = ?, exit_reason = 'MANUAL', 
+                pnl = ?, is_correct = ?, closed_at = ?
+            WHERE id = ?
+        ''', (current_price, pnl, is_correct, datetime.now(), position_id))
+        
+        # Update balance
+        conn.execute('''
+            UPDATE account SET current_balance = current_balance + ? WHERE user_id = ?
+        ''', (pnl, user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        log_action(user_id, 'POSITION_CLOSED_MANUAL', position['pair'],
+                  f"Exit: {current_price}, P&L: ${pnl}")
+        
+        return jsonify({'success': True, 'pnl': pnl, 'is_correct': is_correct})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     init_db()
+    init_auto_tables()
+    start_scheduler(app)
     app.run(debug=True, port=4976)

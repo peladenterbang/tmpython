@@ -72,6 +72,9 @@
                 <button id="analyzeBtn" class="btn btn-primary w-100">
                     <i class="bi bi-play-fill"></i> Run Analysis
                 </button>
+                <button id="pdfBtn" class="btn btn-outline-danger w-100 mt-2" onclick="generatePDFReport()">
+                    <i class="bi bi-file-earmark-pdf"></i> Generate Macro Report (PDF)
+                </button>
             </div>
         </div>
 
@@ -566,5 +569,88 @@ window.addEventListener('resize', () => {
         chart.applyOptions({ width: document.getElementById('chart').clientWidth });
     }
 });
+
+// Generate PDF Report
+function generatePDFReport() {
+    const pair = document.getElementById('pair').value;
+    const btn = document.getElementById('pdfBtn');
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating PDF...';
+    
+    // Capture chart as currently displayed (after user adjusts position)
+    let chartImage = null;
+    if (chart) {
+        try {
+            const container = document.getElementById('chart');
+            const canvases = container.querySelectorAll('canvas');
+            const rect = container.getBoundingClientRect();
+            
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = rect.width;
+            exportCanvas.height = rect.height;
+            const ctx = exportCanvas.getContext('2d');
+            
+            ctx.fillStyle = '#131722';
+            ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+            
+            canvases.forEach(canvas => {
+                const canvasRect = canvas.getBoundingClientRect();
+                const x = canvasRect.left - rect.left;
+                const y = canvasRect.top - rect.top;
+                ctx.drawImage(canvas, x, y);
+            });
+            
+            // Add watermark
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText(pair + ' - ARIMA Forecast', 10, 20);
+            ctx.font = '11px Arial';
+            ctx.fillText(new Date().toLocaleString(), 10, 36);
+            
+            chartImage = exportCanvas.toDataURL('image/png');
+        } catch (e) {
+            console.log('Chart capture error:', e);
+        }
+    }
+    
+    fetch('/generate_macro_report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pair: pair, chart_image: chartImage })
+    })
+    .then(r => r.json())
+    .then(result => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> Generate Macro Report (PDF)';
+        
+        if (result.success) {
+            // Convert base64 to blob and download
+            const byteCharacters = atob(result.pdf);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'application/pdf' });
+            
+            // Create download link
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = result.filename;
+            link.click();
+            
+            // Cleanup
+            URL.revokeObjectURL(link.href);
+        } else {
+            alert('Error: ' + (result.error || 'Failed to generate PDF'));
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> Generate Macro Report (PDF)';
+        alert('Error: ' + err.message);
+    });
+}
 </script>
 {% endblock %}

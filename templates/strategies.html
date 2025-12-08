@@ -1,0 +1,706 @@
+{% extends 'base.html' %}
+
+{% block title %}Quant Strategies - Jim Simons Inspired{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <h2><i class="bi bi-lightbulb"></i> Quantitative Strategies</h2>
+        <p class="text-muted">Jim Simons / Renaissance Technologies Inspired Trading Strategies</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Settings Sidebar -->
+    <div class="col-md-3">
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-gear"></i> Settings
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Pair</label>
+                    <select id="pair" class="form-select">
+                        <optgroup label="Major Pairs">
+                            <option value="EUR/USD" selected>EUR/USD</option>
+                            <option value="GBP/USD">GBP/USD</option>
+                            <option value="USD/JPY">USD/JPY</option>
+                            <option value="USD/CHF">USD/CHF</option>
+                            <option value="AUD/USD">AUD/USD</option>
+                            <option value="USD/CAD">USD/CAD</option>
+                        </optgroup>
+                        <optgroup label="Crypto">
+                            <option value="BTC/USD">BTC/USD</option>
+                            <option value="ETH/USD">ETH/USD</option>
+                            <option value="SOL/USD">SOL/USD</option>
+                        </optgroup>
+                        <optgroup label="Metals">
+                            <option value="XAU/USD">XAU/USD (Gold)</option>
+                            <option value="XAG/USD">XAG/USD (Silver)</option>
+                        </optgroup>
+                        <optgroup label="Indices">
+                            <option value="US500">S&P 500</option>
+                            <option value="US100">Nasdaq 100</option>
+                            <option value="US30">Dow Jones</option>
+                        </optgroup>
+                    </select>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Period</label>
+                        <select id="period" class="form-select">
+                            <option value="1mo" selected>1 Month</option>
+                            <option value="3mo">3 Months</option>
+                            <option value="6mo">6 Months</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Timeframe</label>
+                        <select id="interval" class="form-select">
+                            <option value="15m">15 Minutes</option>
+                            <option value="30m">30 Minutes</option>
+                            <option value="1h" selected>1 Hour</option>
+                            <option value="4h">4 Hours</option>
+                            <option value="1d">Daily</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label"><i class="bi bi-cpu"></i> Strategy</label>
+                    <select id="strategy" class="form-select">
+                        <option value="ensemble" selected>Ensemble (Multi-Factor)</option>
+                        <option value="mean_reversion">Mean Reversion</option>
+                        <option value="momentum">Momentum / Trend</option>
+                        <option value="breakout">Breakout</option>
+                        <option value="volatility">Volatility Breakout</option>
+                        <option value="all">Run All Strategies</option>
+                    </select>
+                    <small class="text-muted" id="strategyDesc">Combines multiple strategies for stronger signals</small>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Balance ($)</label>
+                        <input type="number" id="balance" class="form-control" value="{{ balance }}" min="100">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Risk %</label>
+                        <input type="number" id="risk" class="form-control" value="1" min="0.1" max="10" step="0.1">
+                    </div>
+                </div>
+                
+                <button id="analyzeBtn" class="btn btn-primary w-100 mb-2">
+                    <i class="bi bi-search"></i> Analyze
+                </button>
+                <div id="loading" class="text-center mt-2 d-none">
+                    <div class="spinner-border spinner-border-sm"></div> Analyzing...
+                </div>
+            </div>
+        </div>
+
+        <!-- Signal Card -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-bullseye"></i> Signal
+            </div>
+            <div class="card-body text-center">
+                <div class="display-4 mb-2" id="signalDirection">--</div>
+                <div class="progress mb-2" style="height: 20px;">
+                    <div class="progress-bar" id="signalConfidence" role="progressbar" style="width: 0%">0%</div>
+                </div>
+                <small class="text-muted" id="signalReason">Click Analyze to get signal</small>
+            </div>
+        </div>
+
+        <!-- Ensemble Scores -->
+        <div class="card mb-3" id="ensembleCard" style="display:none;">
+            <div class="card-header">
+                <i class="bi bi-diagram-3"></i> Ensemble Scores
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                    <span class="me-2 text-success" style="width:40px;">BUY</span>
+                    <div class="progress flex-grow-1" style="height: 20px;">
+                        <div class="progress-bar bg-success" id="buyScore" style="width: 0%">0</div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center">
+                    <span class="me-2 text-danger" style="width:40px;">SELL</span>
+                    <div class="progress flex-grow-1" style="height: 20px;">
+                        <div class="progress-bar bg-danger" id="sellScore" style="width: 0%">0</div>
+                    </div>
+                </div>
+                <hr>
+                <small class="text-muted">Strategy Breakdown:</small>
+                <div id="strategySignals" class="mt-2"></div>
+            </div>
+        </div>
+
+        <!-- Strategy Guide -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Strategy Guide
+            </div>
+            <div class="card-body small">
+                <div class="mb-2 p-2 bg-light" style="font-size:11px;">
+                    <strong class="text-primary">Ensemble</strong>
+                    <div>Combines all strategies with weighted voting - Jim Simons' core approach.</div>
+                </div>
+                <div class="mb-2 p-2 bg-light" style="font-size:11px;">
+                    <strong class="text-success">Mean Reversion</strong>
+                    <div>Price tends to return to average. Best in ranging markets.</div>
+                </div>
+                <div class="mb-2 p-2 bg-light" style="font-size:11px;">
+                    <strong class="text-warning">Momentum</strong>
+                    <div>Winners keep winning. Best in trending markets.</div>
+                </div>
+                <div class="mb-2 p-2 bg-light" style="font-size:11px;">
+                    <strong class="text-danger">Breakout</strong>
+                    <div>Trade when price breaks key S/R levels.</div>
+                </div>
+                <div class="p-2 bg-light" style="font-size:11px;">
+                    <strong class="text-info">Volatility</strong>
+                    <div>Trade when volatility expands. Scalping style.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="col-md-9">
+        <!-- Chart -->
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-graph-up"></i> <span id="chartTitle">Candlestick Chart</span></span>
+                <div>
+                    <span class="badge bg-secondary me-2" id="subscriptionBadge">{{ subscription }}</span>
+                    <button id="telegramBtn" class="btn btn-sm btn-info me-2" onclick="sendToTelegram()" title="Send to Telegram">
+                        <i class="bi bi-telegram"></i> Send Alert
+                    </button>
+                    <button id="captureBtn" class="btn btn-sm btn-outline-light" onclick="captureChart()" title="Save Chart">
+                        <i class="bi bi-camera"></i> Capture
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0" style="height: 400px;">
+                <div id="chart" style="width: 100%; height: 100%;"></div>
+            </div>
+        </div>
+
+        <!-- Trade Setup -->
+        <div class="card mb-3" id="tradeSetupCard" style="display:none;">
+            <div class="card-header">
+                <i class="bi bi-cash-stack"></i> Trade Setup
+            </div>
+            <div class="card-body" id="tradeSetup"></div>
+        </div>
+
+        <!-- Indicators -->
+        <div class="card mb-3" id="indicatorsCard" style="display:none;">
+            <div class="card-header">
+                <i class="bi bi-bar-chart"></i> Indicators
+            </div>
+            <div class="card-body">
+                <div class="row" id="indicatorsList"></div>
+            </div>
+        </div>
+
+        <!-- All Strategies (when "Run All" selected) -->
+        <div class="card mb-3" id="allStrategiesCard" style="display:none;">
+            <div class="card-header">
+                <i class="bi bi-list-check"></i> All Active Signals
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm" id="allSignalsTable">
+                        <thead>
+                            <tr>
+                                <th>Strategy</th>
+                                <th>Direction</th>
+                                <th>Confidence</th>
+                                <th>Entry</th>
+                                <th>SL</th>
+                                <th>TP</th>
+                                <th>R:R</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="error" class="alert alert-danger mt-3" style="display: none;"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+let chart = null;
+let candleSeries = null;
+let currentPair = 'EUR_USD';
+let analysisResult = null;
+const subscriptionType = '{{ subscription }}';
+
+const strategyDescriptions = {
+    'ensemble': 'Combines multiple strategies for stronger signals - Jim Simons core approach',
+    'mean_reversion': 'Profits when price returns to average after extreme moves',
+    'momentum': 'Follows the trend - winners keep winning',
+    'breakout': 'Trades when price breaks key support/resistance levels',
+    'volatility': 'Trades when volatility expands - quick scalping style',
+    'all': 'Runs all strategies and shows all active signals'
+};
+
+document.getElementById('strategy').addEventListener('change', function() {
+    document.getElementById('strategyDesc').textContent = strategyDescriptions[this.value] || '';
+});
+
+function captureChart() {
+    if (!chart) {
+        alert('Please analyze a pair first');
+        return;
+    }
+    
+    const container = document.getElementById('chart');
+    const canvases = container.querySelectorAll('canvas');
+    
+    if (canvases.length === 0) {
+        alert('Chart not ready');
+        return;
+    }
+    
+    const rect = container.getBoundingClientRect();
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = rect.width;
+    exportCanvas.height = rect.height;
+    const ctx = exportCanvas.getContext('2d');
+    
+    ctx.fillStyle = '#131722';
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    
+    canvases.forEach(canvas => {
+        const canvasRect = canvas.getBoundingClientRect();
+        const x = canvasRect.left - rect.left;
+        const y = canvasRect.top - rect.top;
+        ctx.drawImage(canvas, x, y);
+    });
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText(currentPair.replace('/', '_') + ' - Quant Strategy', 10, 24);
+    ctx.font = '12px Arial';
+    ctx.fillText(new Date().toLocaleString() + ' | ' + subscriptionType + ' Plan', 10, 42);
+    
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const filename = `${currentPair.replace('/', '_')}_Quant_${timestamp}.png`;
+    
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = exportCanvas.toDataURL('image/png');
+    link.click();
+}
+
+function sendToTelegram() {
+    if (!chart || !analysisResult) {
+        alert('Please analyze a pair first');
+        return;
+    }
+    
+    const btn = document.getElementById('telegramBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending...';
+    
+    const container = document.getElementById('chart');
+    const canvases = container.querySelectorAll('canvas');
+    const rect = container.getBoundingClientRect();
+    
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = rect.width;
+    exportCanvas.height = rect.height;
+    const ctx = exportCanvas.getContext('2d');
+    
+    ctx.fillStyle = '#131722';
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    
+    canvases.forEach(canvas => {
+        const canvasRect = canvas.getBoundingClientRect();
+        const x = canvasRect.left - rect.left;
+        const y = canvasRect.top - rect.top;
+        ctx.drawImage(canvas, x, y);
+    });
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText(currentPair.replace('/', '_') + ' - Quant Strategy', 10, 24);
+    ctx.font = '12px Arial';
+    ctx.fillText(new Date().toLocaleString() + ' | ' + subscriptionType + ' Plan', 10, 42);
+    
+    const imageData = exportCanvas.toDataURL('image/png');
+    
+    const signal = analysisResult.signals?.[0] || analysisResult.active_signals?.[0] || {};
+    
+    fetch('/send_strategy_telegram_alert', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            pair: currentPair,
+            strategy: analysisResult.strategy || 'Ensemble',
+            signal: signal.direction || 'WAIT',
+            confidence: signal.confidence || 0,
+            current_price: analysisResult.current_price,
+            entry: signal.entry,
+            stop_loss: signal.stop_loss,
+            take_profit: signal.take_profit,
+            risk_reward: signal.risk_reward,
+            reason: signal.reason || analysisResult.explanation,
+            image: imageData
+        })
+    })
+    .then(r => r.json())
+    .then(result => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-telegram"></i> Send Alert';
+        
+        if (result.success) {
+            alert('Alert sent to Telegram successfully!');
+        } else {
+            alert('Error: ' + (result.error || 'Failed to send'));
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-telegram"></i> Send Alert';
+        alert('Error: ' + err.message);
+    });
+}
+
+document.getElementById('analyzeBtn').addEventListener('click', async () => {
+    const data = {
+        pair: document.getElementById('pair').value,
+        period: document.getElementById('period').value,
+        interval: document.getElementById('interval').value,
+        strategy: document.getElementById('strategy').value,
+        balance: parseFloat(document.getElementById('balance').value),
+        risk_percent: parseFloat(document.getElementById('risk').value)
+    };
+    
+    document.getElementById('loading').classList.remove('d-none');
+    document.getElementById('analyzeBtn').disabled = true;
+    document.getElementById('error').style.display = 'none';
+    
+    try {
+        const response = await fetch('/analyze_strategies', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        
+        analysisResult = result;
+        currentPair = data.pair;
+        displayResults(result, data);
+        
+    } catch (error) {
+        document.getElementById('error').textContent = error.message;
+        document.getElementById('error').style.display = 'block';
+    } finally {
+        document.getElementById('loading').classList.add('d-none');
+        document.getElementById('analyzeBtn').disabled = false;
+    }
+});
+
+function displayResults(result, params) {
+    document.getElementById('chartTitle').textContent = params.pair + ' - ' + (result.strategy || 'Strategy Analysis');
+    
+    // Draw chart
+    if (result.ohlc && result.dates) {
+        drawChart(result);
+    }
+    
+    // Handle "all strategies" mode
+    if (params.strategy === 'all') {
+        displayAllStrategies(result);
+        return;
+    }
+    
+    // Display signal
+    const signals = result.signals || [];
+    const signal = signals[0] || {};
+    
+    const signalDir = document.getElementById('signalDirection');
+    signalDir.textContent = signal.direction || 'NO SIGNAL';
+    signalDir.className = 'display-4 mb-2 ' + 
+        (signal.direction === 'BUY' ? 'text-success' : 
+         signal.direction === 'SELL' ? 'text-danger' : 'text-warning');
+    
+    const confidence = signal.confidence || 0;
+    const confBar = document.getElementById('signalConfidence');
+    confBar.style.width = confidence + '%';
+    confBar.textContent = confidence + '%';
+    confBar.className = 'progress-bar ' + 
+        (confidence >= 70 ? 'bg-success' : confidence >= 50 ? 'bg-warning' : 'bg-secondary');
+    
+    document.getElementById('signalReason').textContent = signal.reason || result.explanation || '-';
+    
+    // Trade setup
+    if (signal.entry) {
+        const signalClass = signal.direction === 'BUY' ? 'signal-buy' : 'signal-sell';
+        const badgeClass = signal.direction === 'BUY' ? 'badge-soft-success' : 'badge-soft-danger';
+        
+        document.getElementById('tradeSetup').innerHTML = `
+            <div class="p-3 ${signalClass}">
+                <div class="row align-items-center">
+                    <div class="col-md-2 text-center">
+                        <span class="badge fs-6 ${badgeClass}">${signal.direction}</span>
+                        <div class="mt-2"><strong>${signal.risk_reward}R</strong></div>
+                    </div>
+                    <div class="col-md-4">
+                        <table class="table table-sm mb-0">
+                            <tr><td>Entry:</td><td><strong class="text-primary">${signal.entry}</strong></td></tr>
+                            <tr><td>Stop Loss:</td><td><strong class="text-danger">${signal.stop_loss}</strong></td></tr>
+                            <tr><td>Take Profit:</td><td><strong class="text-success">${signal.take_profit}</strong></td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-3">
+                        <table class="table table-sm mb-0">
+                            <tr><td>Lots:</td><td><strong>${signal.lots}</strong></td></tr>
+                            <tr><td>Confidence:</td><td><strong>${signal.confidence}%</strong></td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-3">
+                        <p class="mb-0 small">${signal.reason || ''}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.getElementById('tradeSetupCard').style.display = 'block';
+    } else {
+        document.getElementById('tradeSetup').innerHTML = '<p class="text-muted text-center mb-0">No valid setup found.</p>';
+        document.getElementById('tradeSetupCard').style.display = 'block';
+    }
+    
+    // Ensemble breakdown
+    if (result.ensemble_scores) {
+        document.getElementById('ensembleCard').style.display = 'block';
+        
+        const buyScore = result.ensemble_scores.buy_score || 0;
+        const sellScore = result.ensemble_scores.sell_score || 0;
+        const maxScore = Math.max(buyScore, sellScore, 100);
+        
+        document.getElementById('buyScore').style.width = (buyScore / maxScore * 100) + '%';
+        document.getElementById('buyScore').textContent = buyScore.toFixed(1);
+        
+        document.getElementById('sellScore').style.width = (sellScore / maxScore * 100) + '%';
+        document.getElementById('sellScore').textContent = sellScore.toFixed(1);
+        
+        const signalsDiv = document.getElementById('strategySignals');
+        signalsDiv.innerHTML = '';
+        
+        if (result.signals_detail) {
+            result.signals_detail.forEach(sig => {
+                const badge = sig.direction === 'BUY' ? 'badge-soft-success' : 'badge-soft-danger';
+                signalsDiv.innerHTML += `
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small">${sig.strategy}</span>
+                        <span class="badge ${badge}">${sig.direction} (${sig.weighted_score})</span>
+                    </div>
+                `;
+            });
+        }
+    } else {
+        document.getElementById('ensembleCard').style.display = 'none';
+    }
+    
+    // Indicators
+    if (result.indicators) {
+        document.getElementById('indicatorsCard').style.display = 'block';
+        const indicatorsList = document.getElementById('indicatorsList');
+        indicatorsList.innerHTML = '';
+        
+        Object.entries(result.indicators).forEach(([key, value]) => {
+            if (value !== null && value !== undefined) {
+                indicatorsList.innerHTML += `
+                    <div class="col-md-3 col-6 mb-2">
+                        <div class="border rounded p-2 text-center">
+                            <small class="text-muted">${key.replace(/_/g, ' ').toUpperCase()}</small>
+                            <div class="fw-bold">${typeof value === 'number' ? value.toFixed(5) : value}</div>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+    } else {
+        document.getElementById('indicatorsCard').style.display = 'none';
+    }
+    
+    document.getElementById('allStrategiesCard').style.display = 'none';
+}
+
+function displayAllStrategies(result) {
+    document.getElementById('allStrategiesCard').style.display = 'block';
+    document.getElementById('ensembleCard').style.display = 'none';
+    document.getElementById('indicatorsCard').style.display = 'none';
+    document.getElementById('tradeSetupCard').style.display = 'none';
+    
+    const tbody = document.querySelector('#allSignalsTable tbody');
+    tbody.innerHTML = '';
+    
+    if (result.active_signals && result.active_signals.length > 0) {
+        result.active_signals.forEach(sig => {
+            const badge = sig.direction === 'BUY' ? 'badge-soft-success' : sig.direction === 'SELL' ? 'badge-soft-danger' : 'bg-secondary';
+            tbody.innerHTML += `
+                <tr>
+                    <td>${sig.strategy}</td>
+                    <td><span class="badge ${badge}">${sig.direction}</span></td>
+                    <td>${sig.confidence}%</td>
+                    <td>${sig.entry || '-'}</td>
+                    <td class="text-danger">${sig.stop_loss || '-'}</td>
+                    <td class="text-success">${sig.take_profit || '-'}</td>
+                    <td>${sig.risk_reward || '-'}:1</td>
+                </tr>
+            `;
+        });
+        
+        // Show best signal
+        const best = result.active_signals[0];
+        document.getElementById('signalDirection').textContent = best.direction;
+        document.getElementById('signalDirection').className = 'display-4 mb-2 ' + 
+            (best.direction === 'BUY' ? 'text-success' : 'text-danger');
+        document.getElementById('signalConfidence').style.width = best.confidence + '%';
+        document.getElementById('signalConfidence').textContent = best.confidence + '%';
+        document.getElementById('signalReason').textContent = `Best signal from ${best.strategy}`;
+    } else {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No active signals from any strategy</td></tr>';
+        document.getElementById('signalDirection').textContent = 'NO SIGNAL';
+        document.getElementById('signalDirection').className = 'display-4 mb-2 text-warning';
+    }
+}
+
+function drawChart(data) {
+    const container = document.getElementById('chart');
+    container.innerHTML = '';
+    
+    chart = LightweightCharts.createChart(container, {
+        width: container.clientWidth,
+        height: container.clientHeight,
+        layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
+        grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
+        rightPriceScale: { borderColor: '#2a2e39' },
+        timeScale: { borderColor: '#2a2e39', timeVisible: true },
+        crosshair: {
+            mode: 0,
+            vertLine: { labelVisible: true },
+            horzLine: { labelVisible: true }
+        }
+    });
+    
+    candleSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a', downColor: '#ef5350',
+        borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+        wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+        priceFormat: {
+            type: 'price',
+            precision: 5,
+            minMove: 0.00001
+        }
+    });
+    
+    const candles = data.ohlc.closes.map((_, i) => ({
+        time: Math.floor(new Date(data.dates[i]).getTime() / 1000),
+        open: data.ohlc.opens[i],
+        high: data.ohlc.highs[i],
+        low: data.ohlc.lows[i],
+        close: data.ohlc.closes[i]
+    }));
+    candleSeries.setData(candles);
+    
+    // Trade signal lines
+    const signals = data.signals || data.active_signals || [];
+    const sig = signals[0];
+    
+    if (sig && sig.direction !== 'WAIT') {
+        if (sig.entry) {
+            candleSeries.createPriceLine({
+                price: sig.entry,
+                color: '#2196f3',
+                lineWidth: 2,
+                lineStyle: 2,
+                title: 'Entry'
+            });
+        }
+        if (sig.stop_loss) {
+            candleSeries.createPriceLine({
+                price: sig.stop_loss,
+                color: '#f44336',
+                lineWidth: 2,
+                lineStyle: 2,
+                title: 'SL'
+            });
+        }
+        if (sig.take_profit) {
+            candleSeries.createPriceLine({
+                price: sig.take_profit,
+                color: '#4caf50',
+                lineWidth: 2,
+                lineStyle: 2,
+                title: 'TP'
+            });
+        }
+    }
+    
+    // Indicators lines (if available)
+    const ind = data.indicators || {};
+    if (ind.upper_bb) {
+        candleSeries.createPriceLine({
+            price: ind.upper_bb,
+            color: '#ff9800',
+            lineWidth: 1,
+            lineStyle: 2,
+            title: 'BB Upper'
+        });
+    }
+    if (ind.lower_bb) {
+        candleSeries.createPriceLine({
+            price: ind.lower_bb,
+            color: '#ff9800',
+            lineWidth: 1,
+            lineStyle: 2,
+            title: 'BB Lower'
+        });
+    }
+    if (ind.resistance) {
+        candleSeries.createPriceLine({
+            price: ind.resistance,
+            color: '#ef5350',
+            lineWidth: 1,
+            lineStyle: 0,
+            title: 'Resistance'
+        });
+    }
+    if (ind.support) {
+        candleSeries.createPriceLine({
+            price: ind.support,
+            color: '#26a69a',
+            lineWidth: 1,
+            lineStyle: 0,
+            title: 'Support'
+        });
+    }
+    
+    chart.timeScale().fitContent();
+    
+    window.addEventListener('resize', () => {
+        chart.applyOptions({ width: container.clientWidth });
+    });
+}
+</script>
+{% endblock %}

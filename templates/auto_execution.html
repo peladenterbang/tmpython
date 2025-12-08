@@ -1,0 +1,676 @@
+{% extends 'base.html' %}
+
+{% block title %}Auto Execution - Portfolio Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12 d-flex justify-content-between align-items-center">
+        <div>
+            <h2><i class="bi bi-lightning-charge"></i> Auto Execution Portfolio</h2>
+            <p class="text-muted mb-0">Automatic trade execution with TP/SL monitoring and accuracy tracking</p>
+        </div>
+        <div>
+            <span class="badge bg-{{ 'success' if settings.enabled else 'secondary' }} fs-6" id="statusBadge">
+                {{ 'AUTO ON' if settings.enabled else 'AUTO OFF' }}
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="row mb-3">
+    <div class="col-md-2">
+        <div class="card card-primary">
+            <div class="card-body text-center py-2">
+                <small class="text-muted">Accuracy</small>
+                <h4 class="mb-0 {{ 'text-success' if stats.accuracy_rate >= 50 else 'text-danger' }}">{{ stats.accuracy_rate }}%</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card card-success">
+            <div class="card-body text-center py-2">
+                <small class="text-muted">Win Rate</small>
+                <h4 class="mb-0 text-success">{{ stats.win_rate }}%</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card card-{{ 'success' if stats.total_pnl >= 0 else 'danger' }}">
+            <div class="card-body text-center py-2">
+                <small class="text-muted">Total P&L</small>
+                <h4 class="mb-0 {{ 'text-success' if stats.total_pnl >= 0 else 'text-danger' }}">${{ stats.total_pnl }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card">
+            <div class="card-body text-center py-2">
+                <small class="text-muted">TP Hits</small>
+                <h4 class="mb-0 text-success">{{ stats.tp_hits }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card">
+            <div class="card-body text-center py-2">
+                <small class="text-muted">SL Hits</small>
+                <h4 class="mb-0 text-danger">{{ stats.sl_hits }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card">
+            <div class="card-body text-center py-2">
+                <small class="text-muted">Today</small>
+                <h4 class="mb-0 text-primary">{{ stats.today_trades }}</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Settings Sidebar -->
+    <div class="col-md-3">
+        <!-- Auto Settings -->
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-robot"></i> Auto Settings
+            </div>
+            <div class="card-body">
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="autoEnabled" {{ 'checked' if settings.enabled else '' }}>
+                    <label class="form-check-label" for="autoEnabled">Enable Auto Scanning</label>
+                </div>
+                
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="autoExecute" {{ 'checked' if settings.auto_execute else '' }}>
+                    <label class="form-check-label" for="autoExecute">Auto Execute Trades</label>
+                </div>
+                
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="telegramAlerts" {{ 'checked' if settings.telegram_alerts else '' }}>
+                    <label class="form-check-label" for="telegramAlerts">Telegram Alerts</label>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Scan Interval (min)</label>
+                    <select id="scanInterval" class="form-select">
+                        <option value="15" {{ 'selected' if settings.scan_interval == 15 else '' }}>15 Minutes</option>
+                        <option value="30" {{ 'selected' if settings.scan_interval == 30 else '' }}>30 Minutes</option>
+                        <option value="60" {{ 'selected' if settings.scan_interval == 60 else '' }}>1 Hour</option>
+                        <option value="240" {{ 'selected' if settings.scan_interval == 240 else '' }}>4 Hours</option>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Probability Threshold (%)</label>
+                    <input type="number" id="probThreshold" class="form-control" value="{{ settings.probability_threshold }}" min="50" max="95" step="5">
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Max Trades / Day</label>
+                    <input type="number" id="maxPositions" class="form-control" value="{{ settings.max_open_positions }}" min="1" max="20">
+                    <small class="text-muted">Today: {{ stats.today_trades }}/{{ settings.max_open_positions }}</small>
+                </div>
+                
+                <button id="saveSettingsBtn" class="btn btn-primary w-100 mb-2">
+                    <i class="bi bi-save"></i> Save Settings
+                </button>
+                
+                <button id="manualScanBtn" class="btn btn-success w-100">
+                    <i class="bi bi-search"></i> Manual Scan Now
+                </button>
+            </div>
+        </div>
+
+        <!-- Manual Scan Settings -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-gear"></i> Manual Scan
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Balance ($)</label>
+                    <input type="number" id="balance" class="form-control" value="{{ balance }}" min="100">
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Period</label>
+                        <select id="period" class="form-select">
+                            <option value="1mo">1 Month</option>
+                            <option value="3mo" selected>3 Months</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Timeframe</label>
+                        <select id="interval" class="form-select">
+                            <option value="1h" selected>1 Hour</option>
+                            <option value="4h">4 Hours</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button id="scanBtn" class="btn btn-outline-primary w-100 mb-2">
+                    <i class="bi bi-search"></i> Scan Selected Pairs
+                </button>
+                
+                <button id="simulateBtn" class="btn btn-outline-secondary w-100">
+                    <i class="bi bi-play-circle"></i> Simulate Portfolio
+                </button>
+                
+                <div id="loading" class="text-center mt-2 d-none">
+                    <div class="spinner-border spinner-border-sm"></div> Processing...
+                </div>
+            </div>
+        </div>
+
+        <!-- Portfolio Stats -->
+        <div class="card mb-3" id="statsCard" style="display:none;">
+            <div class="card-header">
+                <i class="bi bi-bar-chart-line"></i> Portfolio Stats
+            </div>
+            <div class="card-body" id="statsContent">
+            </div>
+        </div>
+
+        <!-- Pairs Selection -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-star"></i> Trading Pairs
+            </div>
+            <div class="card-body">
+                <small class="text-muted d-block mb-2">Select pairs for auto scanning:</small>
+                <div class="form-check mb-1">
+                    <input class="form-check-input pair-check" type="checkbox" value="EUR/USD" id="eurusd" {{ 'checked' if 'EUR/USD' in settings.pairs else '' }}>
+                    <label class="form-check-label small" for="eurusd">EUR/USD</label>
+                </div>
+                <div class="form-check mb-1">
+                    <input class="form-check-input pair-check" type="checkbox" value="GBP/USD" id="gbpusd" {{ 'checked' if 'GBP/USD' in settings.pairs else '' }}>
+                    <label class="form-check-label small" for="gbpusd">GBP/USD</label>
+                </div>
+                <div class="form-check mb-1">
+                    <input class="form-check-input pair-check" type="checkbox" value="USD/JPY" id="usdjpy" {{ 'checked' if 'USD/JPY' in settings.pairs else '' }}>
+                    <label class="form-check-label small" for="usdjpy">USD/JPY</label>
+                </div>
+                <div class="form-check mb-1">
+                    <input class="form-check-input pair-check" type="checkbox" value="XAU/USD" id="xauusd" {{ 'checked' if 'XAU/USD' in settings.pairs else '' }}>
+                    <label class="form-check-label small" for="xauusd">XAU/USD (Gold)</label>
+                </div>
+                <div class="form-check mb-1">
+                    <input class="form-check-input pair-check" type="checkbox" value="BTC/USD" id="btcusd" {{ 'checked' if 'BTC/USD' in settings.pairs else '' }}>
+                    <label class="form-check-label small" for="btcusd">BTC/USD</label>
+                </div>
+                <div class="form-check mb-1">
+                    <input class="form-check-input pair-check" type="checkbox" value="ETH/USD" id="ethusd" {{ 'checked' if 'ETH/USD' in settings.pairs else '' }}>
+                    <label class="form-check-label small" for="ethusd">ETH/USD</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input pair-check" type="checkbox" value="US500" id="us500" {{ 'checked' if 'US500' in settings.pairs else '' }}>
+                    <label class="form-check-label small" for="us500">S&P 500</label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="col-md-9">
+        <!-- Open Positions -->
+        <div class="card mb-3">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-briefcase"></i> Open Positions</span>
+                <span class="badge bg-light text-dark">{{ open_positions|length }} active</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Pair</th>
+                                <th>Direction</th>
+                                <th>Entry</th>
+                                <th>Current</th>
+                                <th>SL</th>
+                                <th>TP</th>
+                                <th>P&L</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if open_positions %}
+                                {% for pos in open_positions %}
+                                <tr>
+                                    <td><strong>{{ pos.pair }}</strong></td>
+                                    <td><span class="badge {{ 'badge-soft-success' if pos.direction == 'BUY' else 'badge-soft-danger' }}">{{ pos.direction }}</span></td>
+                                    <td>{{ pos.entry_price }}</td>
+                                    <td>{{ pos.current_price or '-' }}</td>
+                                    <td class="text-danger">{{ pos.stop_loss }}</td>
+                                    <td class="text-success">{{ pos.take_profit }}</td>
+                                    <td>
+                                        {% if pos.current_price %}
+                                            {% set pnl = (pos.current_price - pos.entry_price) * 10000 if pos.direction == 'BUY' else (pos.entry_price - pos.current_price) * 10000 %}
+                                            <span class="{{ 'text-success' if pnl >= 0 else 'text-danger' }}">{{ '%.1f'|format(pnl) }} pips</span>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="closePosition({{ pos.id }})">Close</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="8" class="text-center text-muted py-3">No open positions</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Execution History -->
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-clock-history"></i> Execution History</span>
+                <span class="badge bg-secondary">{{ executions|length }} trades</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="sticky-top bg-white">
+                            <tr>
+                                <th>Date</th>
+                                <th>Pair</th>
+                                <th>Direction</th>
+                                <th>Entry</th>
+                                <th>Exit</th>
+                                <th>Result</th>
+                                <th>P&L</th>
+                                <th>Accuracy</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if executions %}
+                                {% for exec in executions %}
+                                <tr>
+                                    <td class="small">{{ exec.created_at[:16] if exec.created_at else '-' }}</td>
+                                    <td><strong>{{ exec.pair }}</strong></td>
+                                    <td><span class="badge {{ 'badge-soft-success' if exec.direction == 'BUY' else 'badge-soft-danger' }}">{{ exec.direction }}</span></td>
+                                    <td>{{ exec.entry_price }}</td>
+                                    <td>{{ exec.exit_price or '-' }}</td>
+                                    <td>
+                                        {% if exec.status == 'closed' %}
+                                            <span class="badge {{ 'bg-success' if exec.exit_reason == 'TP_HIT' else 'bg-danger' }}">
+                                                {{ exec.exit_reason|replace('_', ' ') if exec.exit_reason else '-' }}
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-primary">OPEN</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="{{ 'text-success' if exec.pnl and exec.pnl > 0 else 'text-danger' if exec.pnl and exec.pnl < 0 else '' }}">
+                                        {{ '$%.2f'|format(exec.pnl) if exec.pnl else '-' }}
+                                    </td>
+                                    <td>
+                                        {% if exec.is_correct is not none %}
+                                            {% if exec.is_correct %}
+                                                <i class="bi bi-check-circle-fill text-success"></i> Correct
+                                            {% else %}
+                                                <i class="bi bi-x-circle-fill text-danger"></i> Wrong
+                                            {% endif %}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="8" class="text-center text-muted py-3">No execution history</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manual Scan Results -->
+        <div class="card mb-3" id="signalsCard" style="display:none;">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-lightning-charge"></i> Scan Results</span>
+                <span class="badge bg-secondary" id="signalCount">0 signals</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="signalsTable">
+                        <thead>
+                            <tr>
+                                <th>Pair</th>
+                                <th>Signal</th>
+                                <th>Probability</th>
+                                <th>Entry</th>
+                                <th>SL</th>
+                                <th>TP</th>
+                                <th>Lots</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="signalsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Logs -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-journal-text"></i> Activity Logs</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshLogs()">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                    <table class="table table-sm mb-0">
+                        <thead class="sticky-top bg-white">
+                            <tr>
+                                <th>Time</th>
+                                <th>Action</th>
+                                <th>Pair</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsBody">
+                            {% if logs %}
+                                {% for log in logs %}
+                                <tr>
+                                    <td class="small text-muted">{{ log.created_at[11:19] if log.created_at else '-' }}</td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if 'EXECUTED' in log.action %}bg-success
+                                            {% elif 'CLOSED' in log.action %}bg-info
+                                            {% elif 'SCAN' in log.action %}bg-secondary
+                                            {% elif 'SIGNAL' in log.action %}bg-warning
+                                            {% else %}bg-light text-dark{% endif %}">
+                                            {{ log.action }}
+                                        </span>
+                                    </td>
+                                    <td>{{ log.pair or '-' }}</td>
+                                    <td class="small">{{ log.details or '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="4" class="text-center text-muted py-2">No activity logs</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="error" class="alert alert-danger mt-3" style="display: none;"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Save Settings
+document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
+    const selectedPairs = [];
+    document.querySelectorAll('.pair-check:checked').forEach(cb => {
+        selectedPairs.push(cb.value);
+    });
+    
+    const data = {
+        enabled: document.getElementById('autoEnabled').checked ? 1 : 0,
+        auto_execute: document.getElementById('autoExecute').checked ? 1 : 0,
+        telegram_alerts: document.getElementById('telegramAlerts').checked ? 1 : 0,
+        scan_interval: parseInt(document.getElementById('scanInterval').value),
+        probability_threshold: parseFloat(document.getElementById('probThreshold').value),
+        max_open_positions: parseInt(document.getElementById('maxPositions').value),
+        pairs: selectedPairs.join(',')
+    };
+    
+    try {
+        const response = await fetch('/save_auto_settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.error) {
+            alert('Error: ' + result.error);
+        } else {
+            // Update status badge
+            const badge = document.getElementById('statusBadge');
+            if (data.enabled) {
+                badge.textContent = 'AUTO ON';
+                badge.classList.remove('bg-secondary');
+                badge.classList.add('bg-success');
+            } else {
+                badge.textContent = 'AUTO OFF';
+                badge.classList.remove('bg-success');
+                badge.classList.add('bg-secondary');
+            }
+            alert('Settings saved successfully!');
+        }
+    } catch (error) {
+        alert('Error saving settings: ' + error.message);
+    }
+});
+
+// Manual Scan
+document.getElementById('manualScanBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('manualScanBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Scanning...';
+    
+    try {
+        const response = await fetch('/trigger_manual_scan', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        
+        const result = await response.json();
+        
+        if (result.error) {
+            alert('Error: ' + result.error);
+        } else {
+            alert('Scan completed! Check logs for results.');
+            location.reload();
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-search"></i> Manual Scan Now';
+    }
+});
+
+// Scan Selected Pairs
+document.getElementById('scanBtn').addEventListener('click', async () => {
+    const selectedPairs = [];
+    document.querySelectorAll('.pair-check:checked').forEach(cb => {
+        selectedPairs.push(cb.value);
+    });
+    
+    if (selectedPairs.length === 0) {
+        alert('Please select at least one pair');
+        return;
+    }
+    
+    const data = {
+        pairs: selectedPairs,
+        period: document.getElementById('period').value,
+        interval: document.getElementById('interval').value,
+        balance: parseFloat(document.getElementById('balance').value),
+        risk_percent: 1.0
+    };
+    
+    document.getElementById('loading').classList.remove('d-none');
+    document.getElementById('scanBtn').disabled = true;
+    document.getElementById('error').style.display = 'none';
+    
+    try {
+        const response = await fetch('/scan_execution', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        
+        displaySignals(result.signals);
+        
+    } catch (error) {
+        document.getElementById('error').textContent = error.message;
+        document.getElementById('error').style.display = 'block';
+    } finally {
+        document.getElementById('loading').classList.add('d-none');
+        document.getElementById('scanBtn').disabled = false;
+    }
+});
+
+// Simulate Portfolio
+document.getElementById('simulateBtn').addEventListener('click', async () => {
+    const data = {
+        initial_balance: parseFloat(document.getElementById('balance').value),
+        risk_percent: 1.0,
+        period: document.getElementById('period').value
+    };
+    
+    document.getElementById('loading').classList.remove('d-none');
+    document.getElementById('simulateBtn').disabled = true;
+    
+    try {
+        const response = await fetch('/simulate_portfolio', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        
+        alert(`Simulation Complete!\n\nTotal Trades: ${result.stats.total_trades}\nWin Rate: ${result.stats.win_rate}%\nTotal P&L: $${result.stats.total_pnl}`);
+        
+    } catch (error) {
+        alert('Error: ' + error.message);
+    } finally {
+        document.getElementById('loading').classList.add('d-none');
+        document.getElementById('simulateBtn').disabled = false;
+    }
+});
+
+function displaySignals(signals) {
+    document.getElementById('signalsCard').style.display = 'block';
+    const tbody = document.getElementById('signalsBody');
+    tbody.innerHTML = '';
+    
+    document.getElementById('signalCount').textContent = signals.length + ' signals';
+    
+    if (signals.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No signals found</td></tr>';
+        return;
+    }
+    
+    signals.forEach(sig => {
+        const signalClass = sig.signal === 'BUY' ? 'badge-soft-success' : sig.signal === 'SELL' ? 'badge-soft-danger' : 'bg-secondary';
+        const probClass = sig.execution_probability >= 70 ? 'text-success' : sig.execution_probability >= 50 ? 'text-warning' : 'text-danger';
+        
+        tbody.innerHTML += `
+            <tr>
+                <td><strong>${sig.pair}</strong></td>
+                <td><span class="badge ${signalClass}">${sig.signal}</span></td>
+                <td>
+                    <strong class="${probClass}">${sig.execution_probability}%</strong>
+                </td>
+                <td>${sig.entry || '-'}</td>
+                <td class="text-danger">${sig.stop_loss || '-'}</td>
+                <td class="text-success">${sig.take_profit || '-'}</td>
+                <td>${sig.lots}</td>
+                <td>
+                    ${sig.should_execute 
+                        ? `<button class="btn btn-sm btn-success" onclick="executeTrade('${sig.pair}', '${sig.signal}', ${sig.entry}, ${sig.stop_loss}, ${sig.take_profit}, ${sig.lots}, ${sig.execution_probability})"><i class="bi bi-check"></i> Execute</button>`
+                        : '<span class="text-muted small">Low prob</span>'
+                    }
+                </td>
+            </tr>
+        `;
+    });
+}
+
+async function executeTrade(pair, direction, entry, sl, tp, lots, probability) {
+    if (!confirm(`Execute ${direction} on ${pair}?`)) return;
+    
+    try {
+        const response = await fetch('/execute_auto_trade', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                pair: pair,
+                direction: direction,
+                entry: entry,
+                stop_loss: sl,
+                take_profit: tp,
+                lots: lots,
+                probability: probability
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.error) {
+            alert('Error: ' + result.error);
+        } else {
+            alert('Trade executed successfully!');
+            location.reload();
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+async function closePosition(positionId) {
+    if (!confirm('Close this position at current price?')) return;
+    
+    try {
+        const response = await fetch('/close_auto_position/' + positionId, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        
+        const result = await response.json();
+        
+        if (result.error) {
+            alert('Error: ' + result.error);
+        } else {
+            alert(`Position closed! P&L: $${result.pnl}`);
+            location.reload();
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+function refreshLogs() {
+    location.reload();
+}
+
+// Auto-refresh every 60 seconds if auto is enabled
+{% if settings.enabled %}
+setInterval(() => {
+    location.reload();
+}, 60000);
+{% endif %}
+</script>
+{% endblock %}
