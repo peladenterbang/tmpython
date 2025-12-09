@@ -15,6 +15,7 @@ import requests
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from trading_strategies import EnsembleStrategy
+from ict_methods import analyze_ict
 import threading
 import time
 
@@ -47,12 +48,19 @@ def init_auto_tables():
             max_open_positions INTEGER DEFAULT 3,
             auto_execute INTEGER DEFAULT 0,
             telegram_alerts INTEGER DEFAULT 1,
+            trading_method TEXT DEFAULT 'ML',
             pairs TEXT DEFAULT 'EUR/USD,GBP/USD,XAU/USD',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
+    
+    # Add trading_method column if not exists (migration)
+    try:
+        conn.execute('ALTER TABLE auto_settings ADD COLUMN trading_method TEXT DEFAULT "ML"')
+    except:
+        pass  # Column already exists
     
     # Auto executed trades with monitoring
     conn.execute('''
@@ -167,8 +175,11 @@ def get_current_price(pair):
         return None
 
 
-def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0):
-    """Analyze a pair and return signal with probability"""
+def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_method='ML'):
+    """
+    Analyze a pair and return signal with probability
+    trading_method: 'ML' (Machine Learning), 'ICT' (Smart Money), 'HYBRID' (Both)
+    """
     ticker_symbol = FOREX_TICKERS.get(pair)
     if not ticker_symbol:
         return None
@@ -185,39 +196,170 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0):
         lows = df['Low'].tolist()
         closes = df['Close'].tolist()
         
-        strategy = EnsembleStrategy()
-        result = strategy.analyze(opens, highs, lows, closes, balance, risk_percent)
+        signal = None
+        probability = 0
+        method_used = trading_method
         
-        if 'signals' not in result or not result['signals']:
+        if trading_method == 'ICT':
+            # Use ICT (Smart Money) analysis
+            result = analyze_ict(opens, highs, lows, closes, balance, risk_percent, '1h')
+            
+            if 'error' in result:
+                return None
+            
+            # Get ICT signal from weekly bias and trade setups
+            bias = result.get('weekly_bias', 'NEUTRAL')
+            confidence = result.get('confidence', 50)
+            trade_setups = result.get('trade_setups', [])
+            
+            if bias == 'BULLISH' and confidence >= 50:
+                direction = 'BUY'
+            elif bias == 'BEARISH' and confidence >= 50:
+                direction = 'SELL'
+            else:
+                direction = 'WAIT'
+            
+            if direction != 'WAIT':
+                # Use trade setup if available
+                if trade_setups:
+                    setup = trade_setups[0]
+                    signal = {
+                        'direction': setup.get('type', direction),
+                        'entry': setup.get('entry', closes[-1]),
+                        'stop_loss': setup.get('stop_loss', closes[-1] * 0.99 if direction == 'BUY' else closes[-1] * 1.01),
+                        'take_profit': setup.get('take_profit', closes[-1] * 1.02 if direction == 'BUY' else closes[-1] * 0.98),
+                        'lots': setup.get('lots', 0.01),
+                        'confidence': confidence
+                    }
+                else:
+                    # Generate basic signal from bias
+                    signal = {
+                        'direction': direction,
+                        'entry': closes[-1],
+                        'stop_loss': closes[-1] * 0.995 if direction == 'BUY' else closes[-1] * 1.005,
+                        'take_profit': closes[-1] * 1.015 if direction == 'BUY' else closes[-1] * 0.985,
+                        'lots': 0.01,
+                        'confidence': confidence
+                    }
+                
+                # Calculate probability from ICT confidence factors
+                probability = confidence
+                
+                # Bonus for kill zone
+                session = result.get('session', {})
+                if session.get('is_kill_zone'):
+                    probability = min(95, probability + 10)
+                
+                # Bonus for structure alignment
+                market_structure = result.get('market_structure', {})
+                if market_structure.get('trend') == bias:
+                    probability = min(95, probability + 5)
+        
+        elif trading_method == 'ML':
+            # Use ML (Ensemble) analysis
+            strategy = EnsembleStrategy()
+            result = strategy.analyze(opens, highs, lows, closes, balance, risk_percent)
+            
+            if 'signals' not in result or not result['signals']:
+                return None
+            
+            signal = result['signals'][0]
+            
+            # Calculate execution probability
+            ensemble_scores = result.get('ensemble_scores', {})
+            buy_score = ensemble_scores.get('buy_score', 0)
+            sell_score = ensemble_scores.get('sell_score', 0)
+            
+            if signal['direction'] == 'BUY':
+                probability = min(95, 40 + buy_score * 0.5)
+            elif signal['direction'] == 'SELL':
+                probability = min(95, 40 + sell_score * 0.5)
+            else:
+                probability = 0
+        
+        elif trading_method == 'HYBRID':
+            # Use both ML and ICT, combine signals
+            
+            # Get ML signal
+            strategy = EnsembleStrategy()
+            ml_result = strategy.analyze(opens, highs, lows, closes, balance, risk_percent)
+            
+            ml_signal = None
+            ml_probability = 0
+            if 'signals' in ml_result and ml_result['signals']:
+                ml_signal = ml_result['signals'][0]
+                ensemble_scores = ml_result.get('ensemble_scores', {})
+                if ml_signal['direction'] == 'BUY':
+                    ml_probability = min(95, 40 + ensemble_scores.get('buy_score', 0) * 0.5)
+                elif ml_signal['direction'] == 'SELL':
+                    ml_probability = min(95, 40 + ensemble_scores.get('sell_score', 0) * 0.5)
+            
+            # Get ICT signal
+            ict_result = analyze_ict(opens, highs, lows, closes, balance, risk_percent, '1h')
+            
+            ict_bias = ict_result.get('weekly_bias', 'NEUTRAL') if 'error' not in ict_result else 'NEUTRAL'
+            ict_confidence = ict_result.get('confidence', 50) if 'error' not in ict_result else 50
+            
+            ict_direction = 'BUY' if ict_bias == 'BULLISH' else 'SELL' if ict_bias == 'BEARISH' else 'WAIT'
+            
+            # Check if ML and ICT agree
+            if ml_signal and ml_signal['direction'] == ict_direction:
+                # Both agree - high confidence
+                signal = ml_signal
+                probability = min(95, (ml_probability + ict_confidence) / 2 + 15)  # Bonus for agreement
+                method_used = 'HYBRID_AGREE'
+            elif ml_signal and ml_probability >= 70:
+                # ML has strong signal, use it even if ICT disagrees
+                signal = ml_signal
+                probability = ml_probability * 0.9  # Slight penalty for disagreement
+                method_used = 'HYBRID_ML'
+            elif ict_direction != 'WAIT' and ict_confidence >= 70:
+                # ICT has strong signal
+                trade_setups = ict_result.get('trade_setups', [])
+                if trade_setups:
+                    setup = trade_setups[0]
+                    signal = {
+                        'direction': setup.get('type', ict_direction),
+                        'entry': setup.get('entry', closes[-1]),
+                        'stop_loss': setup.get('stop_loss', closes[-1] * 0.99 if ict_direction == 'BUY' else closes[-1] * 1.01),
+                        'take_profit': setup.get('take_profit', closes[-1] * 1.02 if ict_direction == 'BUY' else closes[-1] * 0.98),
+                        'lots': setup.get('lots', 0.01),
+                        'confidence': ict_confidence
+                    }
+                else:
+                    signal = {
+                        'direction': ict_direction,
+                        'entry': closes[-1],
+                        'stop_loss': closes[-1] * 0.995 if ict_direction == 'BUY' else closes[-1] * 1.005,
+                        'take_profit': closes[-1] * 1.015 if ict_direction == 'BUY' else closes[-1] * 0.985,
+                        'lots': 0.01,
+                        'confidence': ict_confidence
+                    }
+                probability = ict_confidence * 0.9
+                method_used = 'HYBRID_ICT'
+            elif ml_signal:
+                # Use ML signal with lower confidence
+                signal = ml_signal
+                probability = ml_probability * 0.8
+                method_used = 'HYBRID_ML_WEAK'
+        
+        if not signal or signal.get('direction') == 'WAIT':
             return None
-        
-        signal = result['signals'][0]
-        
-        # Calculate execution probability
-        ensemble_scores = result.get('ensemble_scores', {})
-        buy_score = ensemble_scores.get('buy_score', 0)
-        sell_score = ensemble_scores.get('sell_score', 0)
-        
-        if signal['direction'] == 'BUY':
-            probability = min(95, 40 + buy_score * 0.5)
-        elif signal['direction'] == 'SELL':
-            probability = min(95, 40 + sell_score * 0.5)
-        else:
-            probability = 0
         
         return {
             'pair': pair,
             'direction': signal['direction'],
-            'entry': signal['entry'],
-            'stop_loss': signal['stop_loss'],
-            'take_profit': signal['take_profit'],
-            'lots': signal['lots'],
+            'entry': signal.get('entry', closes[-1]),
+            'stop_loss': signal.get('stop_loss'),
+            'take_profit': signal.get('take_profit'),
+            'lots': signal.get('lots', 0.01),
             'probability': round(probability, 1),
-            'confidence': signal['confidence'],
-            'current_price': closes[-1]
+            'confidence': signal.get('confidence', 50),
+            'current_price': closes[-1],
+            'method': method_used
         }
     except Exception as e:
-        print(f"Error analyzing {pair}: {e}")
+        print(f"Error analyzing {pair} with {trading_method}: {e}")
         return None
 
 
@@ -257,10 +399,11 @@ def scan_markets_for_user(user_id):
     probability_threshold = settings['probability_threshold']
     auto_execute = settings['auto_execute']
     telegram_alerts = settings['telegram_alerts']
+    trading_method = settings.get('trading_method', 'ML')  # Default to ML
     
     conn.close()
     
-    log_action(user_id, 'SCAN_STARTED', details=f'Scanning {len(pairs)} pairs')
+    log_action(user_id, 'SCAN_STARTED', details=f'Scanning {len(pairs)} pairs with {trading_method} method')
     
     for pair in pairs:
         pair = pair.strip()
@@ -276,7 +419,7 @@ def scan_markets_for_user(user_id):
         if existing:
             continue
         
-        signal = analyze_pair_for_signal(pair, balance)
+        signal = analyze_pair_for_signal(pair, balance, 1.0, trading_method)
         
         if not signal:
             continue
@@ -663,7 +806,11 @@ def get_user_settings(user_id):
     conn.close()
     
     if settings:
-        return dict(settings)
+        result = dict(settings)
+        # Ensure trading_method has a default
+        if 'trading_method' not in result or not result['trading_method']:
+            result['trading_method'] = 'ML'
+        return result
     
     return {
         'enabled': 0,
@@ -672,6 +819,7 @@ def get_user_settings(user_id):
         'max_open_positions': 3,
         'auto_execute': 0,
         'telegram_alerts': 1,
+        'trading_method': 'ML',
         'pairs': 'EUR/USD,GBP/USD,XAU/USD'
     }
 
@@ -687,7 +835,7 @@ def save_user_settings(user_id, settings):
             UPDATE auto_settings SET
                 enabled = ?, scan_interval = ?, probability_threshold = ?,
                 max_open_positions = ?, auto_execute = ?, telegram_alerts = ?,
-                pairs = ?, updated_at = ?
+                trading_method = ?, pairs = ?, updated_at = ?
             WHERE user_id = ?
         ''', (
             settings.get('enabled', 0),
@@ -696,6 +844,7 @@ def save_user_settings(user_id, settings):
             settings.get('max_open_positions', 3),
             settings.get('auto_execute', 0),
             settings.get('telegram_alerts', 1),
+            settings.get('trading_method', 'ML'),
             settings.get('pairs', 'EUR/USD,GBP/USD,XAU/USD'),
             datetime.now(),
             user_id
@@ -703,8 +852,8 @@ def save_user_settings(user_id, settings):
     else:
         conn.execute('''
             INSERT INTO auto_settings 
-            (user_id, enabled, scan_interval, probability_threshold, max_open_positions, auto_execute, telegram_alerts, pairs)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (user_id, enabled, scan_interval, probability_threshold, max_open_positions, auto_execute, telegram_alerts, trading_method, pairs)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             user_id,
             settings.get('enabled', 0),
@@ -713,10 +862,11 @@ def save_user_settings(user_id, settings):
             settings.get('max_open_positions', 3),
             settings.get('auto_execute', 0),
             settings.get('telegram_alerts', 1),
+            settings.get('trading_method', 'ML'),
             settings.get('pairs', 'EUR/USD,GBP/USD,XAU/USD')
         ))
     
     conn.commit()
     conn.close()
     
-    log_action(user_id, 'SETTINGS_UPDATED', details=f"Auto-execute: {settings.get('auto_execute', 0)}")
+    log_action(user_id, 'SETTINGS_UPDATED', details=f"Method: {settings.get('trading_method', 'ML')}, Auto-execute: {settings.get('auto_execute', 0)}")

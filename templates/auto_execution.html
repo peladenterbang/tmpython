@@ -104,6 +104,32 @@
                 </div>
                 
                 <div class="mb-3">
+                    <label class="form-label">Trading Method</label>
+                    <select id="tradingMethod" class="form-select">
+                        <option value="ML" {{ 'selected' if settings.trading_method == 'ML' else '' }}>
+                            <i class="bi bi-cpu"></i> ML (Machine Learning)
+                        </option>
+                        <option value="ICT" {{ 'selected' if settings.trading_method == 'ICT' else '' }}>
+                            <i class="bi bi-bank"></i> ICT (Smart Money)
+                        </option>
+                        <option value="HYBRID" {{ 'selected' if settings.trading_method == 'HYBRID' else '' }}>
+                            <i class="bi bi-intersect"></i> Hybrid (ML + ICT)
+                        </option>
+                    </select>
+                    <small class="text-muted">
+                        <span id="methodDescription">
+                            {% if settings.trading_method == 'ICT' %}
+                                Uses Kill Zones, Order Blocks, FVG, BOS/ChoCH
+                            {% elif settings.trading_method == 'HYBRID' %}
+                                Combines ML signals with ICT confirmation
+                            {% else %}
+                                Uses Ensemble strategies (Momentum, Mean Reversion, Breakout)
+                            {% endif %}
+                        </span>
+                    </small>
+                </div>
+                
+                <div class="mb-3">
                     <label class="form-label">Probability Threshold (%)</label>
                     <input type="number" id="probThreshold" class="form-control" value="{{ settings.probability_threshold }}" min="50" max="95" step="5">
                 </div>
@@ -428,6 +454,7 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
         scan_interval: parseInt(document.getElementById('scanInterval').value),
         probability_threshold: parseFloat(document.getElementById('probThreshold').value),
         max_open_positions: parseInt(document.getElementById('maxPositions').value),
+        trading_method: document.getElementById('tradingMethod').value,
         pairs: selectedPairs.join(',')
     };
     
@@ -665,6 +692,20 @@ async function closePosition(positionId) {
 function refreshLogs() {
     location.reload();
 }
+
+// Update method description on change
+document.getElementById('tradingMethod').addEventListener('change', function() {
+    const desc = document.getElementById('methodDescription');
+    const method = this.value;
+    
+    if (method === 'ICT') {
+        desc.innerHTML = 'Uses Kill Zones, Order Blocks, FVG, BOS/ChoCH';
+    } else if (method === 'HYBRID') {
+        desc.innerHTML = 'Combines ML signals with ICT confirmation';
+    } else {
+        desc.innerHTML = 'Uses Ensemble strategies (Momentum, Mean Reversion, Breakout)';
+    }
+});
 
 // Auto-refresh every 60 seconds if auto is enabled
 {% if settings.enabled %}
