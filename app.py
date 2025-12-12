@@ -108,13 +108,33 @@ app = Flask(__name__)
 app.secret_key = 'forex-risk-manager-secret-key-2024'
 DATABASE = 'database.db'
 
+# Upload configuration
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2MB max
+
+# Create upload folder if not exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 # Fix for reverse proxy (Nginx) - ensures correct URL generation
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-# Add datetime to Jinja2 templates
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# Add datetime and site settings to Jinja2 templates
 @app.context_processor
-def inject_now():
-    return {'now': datetime.now}
+def inject_globals():
+    site_logo = get_app_setting('site_logo') or '/static/default-logo.png'
+    site_name = get_app_setting('site_name') or 'Forex Risk Manager'
+    site_favicon = get_app_setting('site_favicon') or '/static/favicon.ico'
+    return {
+        'now': datetime.now,
+        'site_logo': site_logo,
+        'site_name': site_name,
+        'site_favicon': site_favicon
+    }
 
 # Telegram Configuration (User can set their own bot token and chat ID)
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
@@ -1417,8 +1437,40 @@ def admin_update_settings():
     elif settings_type == 'site':
         # Site settings
         site_url = request.form.get('site_url', '').strip().rstrip('/')
+        site_name = request.form.get('site_name', 'Forex Risk Manager').strip()
         set_app_setting('site_url', site_url)
+        set_app_setting('site_name', site_name)
         flash('Site settings updated successfully!', 'success')
+    elif settings_type == 'branding':
+        # Branding settings (logo, favicon)
+        site_name = request.form.get('site_name', 'Forex Risk Manager').strip()
+        set_app_setting('site_name', site_name)
+        
+        # Handle logo upload
+        if 'site_logo' in request.files:
+            file = request.files['site_logo']
+            if file and file.filename and allowed_file(file.filename):
+                from werkzeug.utils import secure_filename
+                import uuid
+                ext = file.filename.rsplit('.', 1)[1].lower()
+                filename = f"logo_{uuid.uuid4().hex[:8]}.{ext}"
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(filepath)
+                set_app_setting('site_logo', f'/static/uploads/{filename}')
+        
+        # Handle favicon upload
+        if 'site_favicon' in request.files:
+            file = request.files['site_favicon']
+            if file and file.filename and allowed_file(file.filename):
+                from werkzeug.utils import secure_filename
+                import uuid
+                ext = file.filename.rsplit('.', 1)[1].lower()
+                filename = f"favicon_{uuid.uuid4().hex[:8]}.{ext}"
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(filepath)
+                set_app_setting('site_favicon', f'/static/uploads/{filename}')
+        
+        flash('Branding settings updated successfully!', 'success')
     else:
         # Midtrans settings
         set_app_setting('midtrans_server_key', request.form.get('midtrans_server_key', ''))

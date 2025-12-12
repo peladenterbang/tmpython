@@ -233,6 +233,122 @@
         </div>
     </div>
 
+    <!-- Branding Settings -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <i class="bi bi-palette"></i> Branding Settings
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin_update_settings') }}" enctype="multipart/form-data">
+                        <input type="hidden" name="settings_type" value="branding">
+                        
+                        <!-- Site Name -->
+                        <div class="mb-3">
+                            <label class="form-label" for="site_name">
+                                <i class="bi bi-building"></i> Site Name
+                            </label>
+                            <input type="text" class="form-control" id="site_name" 
+                                   name="site_name"
+                                   value="{{ settings.get('site_name', 'Forex Risk Manager') }}"
+                                   placeholder="Forex Risk Manager">
+                            <small class="text-muted">Displayed in navbar and page titles</small>
+                        </div>
+
+                        <!-- Logo Upload -->
+                        <div class="mb-3">
+                            <label class="form-label" for="site_logo">
+                                <i class="bi bi-image"></i> Site Logo
+                            </label>
+                            <input type="file" class="form-control" id="site_logo" 
+                                   name="site_logo"
+                                   accept=".png,.jpg,.jpeg,.gif,.svg">
+                            <small class="text-muted">Recommended: 200x50px, PNG or SVG. Max 2MB.</small>
+                            {% if settings.get('site_logo') %}
+                            <div class="mt-2">
+                                <span class="text-muted">Current:</span>
+                                <img src="{{ settings.get('site_logo') }}" alt="Current Logo" 
+                                     style="max-height: 40px; max-width: 150px;" class="ms-2 border p-1">
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Favicon Upload -->
+                        <div class="mb-3">
+                            <label class="form-label" for="site_favicon">
+                                <i class="bi bi-app"></i> Favicon
+                            </label>
+                            <input type="file" class="form-control" id="site_favicon" 
+                                   name="site_favicon"
+                                   accept=".png,.ico,.jpg,.jpeg">
+                            <small class="text-muted">Recommended: 32x32px or 64x64px, PNG or ICO.</small>
+                            {% if settings.get('site_favicon') %}
+                            <div class="mt-2">
+                                <span class="text-muted">Current:</span>
+                                <img src="{{ settings.get('site_favicon') }}" alt="Current Favicon" 
+                                     style="max-height: 32px; max-width: 32px;" class="ms-2 border p-1">
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <button type="submit" class="btn btn-secondary">
+                            <i class="bi bi-save"></i> Save Branding
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-info-circle"></i> Current Branding
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tr>
+                            <td>Site Name</td>
+                            <td><strong>{{ settings.get('site_name', 'Forex Risk Manager') }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Logo</td>
+                            <td>
+                                {% if settings.get('site_logo') %}
+                                <img src="{{ settings.get('site_logo') }}" alt="Logo" style="max-height: 30px;">
+                                {% else %}
+                                <span class="text-muted">Default</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Favicon</td>
+                            <td>
+                                {% if settings.get('site_favicon') %}
+                                <img src="{{ settings.get('site_favicon') }}" alt="Favicon" style="max-height: 20px;">
+                                {% else %}
+                                <span class="text-muted">Default</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-lightbulb"></i> Tips
+                </div>
+                <div class="card-body small">
+                    <ul class="ps-3 mb-0">
+                        <li>Logo appears in navbar</li>
+                        <li>Use transparent PNG for best results</li>
+                        <li>Favicon shows in browser tab</li>
+                        <li>Changes apply site-wide instantly</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row">
         <!-- Midtrans Settings -->
         <div class="col-lg-8">

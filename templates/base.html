@@ -3,20 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Forex Risk Manager{% endblock %}</title>
+    <title>{% block title %}{{ site_name }}{% endblock %}</title>
+    <link rel="icon" type="image/x-icon" href="{{ site_favicon }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
     <style>
         .navbar { padding: 0.3rem 0; }
         .navbar-nav .nav-link { padding: 0.5rem 0.6rem !important; font-size: 0.9rem; }
+        .navbar-brand img { max-height: 30px; }
     </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid px-3">
-            <a class="navbar-brand" href="{{ url_for('index') }}">
-                <i class="bi bi-graph-up-arrow"></i> FRM
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
+                {% if site_logo and not site_logo.endswith('default-logo.png') %}
+                <img src="{{ site_logo }}" alt="{{ site_name }}" class="me-2">
+                {% else %}
+                <i class="bi bi-graph-up-arrow me-1"></i>
+                {% endif %}
+                <span>{{ site_name[:20] }}</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>

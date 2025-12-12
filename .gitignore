@@ -9,6 +9,9 @@ venv/
 *.db
 *.db.backup
 
+# Uploads
+static/uploads/
+
 # Python
 __pycache__/
 *.py[cod]
