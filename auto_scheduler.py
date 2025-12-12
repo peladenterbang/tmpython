@@ -157,7 +157,7 @@ FOREX_TICKERS = {
 }
 
 
-def get_current_price(pair):
+def fetch_pair_price(pair):
     """Get current price for a pair"""
     ticker_symbol = FOREX_TICKERS.get(pair)
     if not ticker_symbol:
@@ -173,6 +173,12 @@ def get_current_price(pair):
         return df['Close'].iloc[-1]
     except:
         return None
+
+
+# Alias for backward compatibility
+def get_current_price(pair):
+    """Alias for fetch_pair_price - Get current price for a pair"""
+    return fetch_pair_price(pair)
 
 
 def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_method='ML'):

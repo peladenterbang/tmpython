@@ -33,7 +33,7 @@ from auto_execution import AutoExecutor, get_execution_signals, simulate_auto_po
 from auto_scheduler import (
     init_auto_tables, start_scheduler, get_user_stats, get_user_executions,
     get_user_logs, get_user_settings, save_user_settings, scan_markets_for_user,
-    log_action, get_current_price, close_position
+    log_action, fetch_pair_price, close_position
 )
 
 # Yahoo Finance ticker symbols for forex pairs
@@ -2305,7 +2305,7 @@ def close_auto_position(position_id):
             return jsonify({'error': 'Position not found'}), 404
         
         # Get current price
-        current_price = get_current_price(position['pair'])
+        current_price = fetch_pair_price(position['pair'])
         if current_price is None:
             current_price = position['current_price'] or position['entry_price']
         
