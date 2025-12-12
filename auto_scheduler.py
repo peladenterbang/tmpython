@@ -181,10 +181,133 @@ def get_current_price(pair):
     return fetch_pair_price(pair)
 
 
+def calculate_atr(highs, lows, closes, period=14):
+    """Calculate Average True Range"""
+    if len(closes) < period + 1:
+        return None
+    
+    tr_list = []
+    for i in range(1, len(closes)):
+        high_low = highs[i] - lows[i]
+        high_close = abs(highs[i] - closes[i-1])
+        low_close = abs(lows[i] - closes[i-1])
+        tr = max(high_low, high_close, low_close)
+        tr_list.append(tr)
+    
+    if len(tr_list) < period:
+        return sum(tr_list) / len(tr_list) if tr_list else None
+    
+    return sum(tr_list[-period:]) / period
+
+
+def calculate_lot_size(balance, risk_percent, entry_price, stop_loss, pair):
+    """
+    Calculate proper lot size based on risk management
+    
+    Formula: Lot Size = (Account Risk) / (Stop Loss in Pips * Pip Value)
+    """
+    if not entry_price or not stop_loss or entry_price == stop_loss:
+        return 0.01
+    
+    # Calculate stop loss distance
+    sl_distance = abs(entry_price - stop_loss)
+    
+    # Risk amount in account currency
+    risk_amount = balance * (risk_percent / 100)
+    
+    # Determine pip value based on pair type
+    if 'JPY' in pair:
+        # JPY pairs: pip = 0.01
+        pip_size = 0.01
+        sl_pips = sl_distance / pip_size
+    elif 'XAU' in pair or 'GOLD' in pair:
+        # Gold: pip = 0.1
+        pip_size = 0.1
+        sl_pips = sl_distance / pip_size
+    elif 'BTC' in pair or 'ETH' in pair:
+        # Crypto: use percentage
+        sl_pips = (sl_distance / entry_price) * 10000
+        pip_size = entry_price / 10000
+    elif 'US500' in pair or 'US100' in pair:
+        # Indices: pip = 0.1
+        pip_size = 0.1
+        sl_pips = sl_distance / pip_size
+    else:
+        # Standard forex pairs: pip = 0.0001
+        pip_size = 0.0001
+        sl_pips = sl_distance / pip_size
+    
+    if sl_pips <= 0:
+        return 0.01
+    
+    # Pip value for 1 standard lot (100,000 units)
+    # For USD quote pairs: $10 per pip per lot
+    # For non-USD: varies, but we'll use $10 as approximation
+    pip_value_per_lot = 10
+    
+    # Calculate lot size
+    lot_size = risk_amount / (sl_pips * pip_value_per_lot)
+    
+    # Round to 2 decimal places and enforce limits
+    lot_size = round(lot_size, 2)
+    lot_size = max(0.01, min(10.0, lot_size))  # Min 0.01, Max 10 lots
+    
+    return lot_size
+
+
+def calculate_sl_tp_levels(entry_price, direction, atr, highs, lows, risk_reward=2.0):
+    """
+    Calculate Stop Loss and Take Profit based on ATR and recent swing points
+    """
+    if not atr:
+        # Fallback: use percentage-based SL/TP
+        if direction == 'BUY':
+            stop_loss = entry_price * 0.995
+            take_profit = entry_price * 1.015
+        else:
+            stop_loss = entry_price * 1.005
+            take_profit = entry_price * 0.985
+        return stop_loss, take_profit
+    
+    # Use 1.5x ATR for stop loss
+    sl_distance = atr * 1.5
+    
+    # Use risk_reward ratio for take profit
+    tp_distance = sl_distance * risk_reward
+    
+    if direction == 'BUY':
+        # For BUY: SL below entry, TP above entry
+        # Also consider recent swing low for SL
+        recent_low = min(lows[-20:]) if len(lows) >= 20 else min(lows)
+        
+        # Use the larger of ATR-based SL or swing low
+        atr_sl = entry_price - sl_distance
+        swing_sl = recent_low - (atr * 0.2)  # Small buffer below swing low
+        
+        stop_loss = min(atr_sl, swing_sl)  # Use the lower (safer) SL
+        take_profit = entry_price + tp_distance
+        
+    else:  # SELL
+        # For SELL: SL above entry, TP below entry
+        recent_high = max(highs[-20:]) if len(highs) >= 20 else max(highs)
+        
+        atr_sl = entry_price + sl_distance
+        swing_sl = recent_high + (atr * 0.2)  # Small buffer above swing high
+        
+        stop_loss = max(atr_sl, swing_sl)  # Use the higher (safer) SL
+        take_profit = entry_price - tp_distance
+    
+    return round(stop_loss, 5), round(take_profit, 5)
+
+
 def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_method='ML'):
     """
     Analyze a pair and return signal with probability
     trading_method: 'ML' (Machine Learning), 'ICT' (Smart Money), 'HYBRID' (Both)
+    
+    Properly calculates:
+    - ATR-based Stop Loss and Take Profit
+    - Risk-adjusted lot sizes
     """
     ticker_symbol = FOREX_TICKERS.get(pair)
     if not ticker_symbol:
@@ -202,9 +325,13 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_metho
         lows = df['Low'].tolist()
         closes = df['Close'].tolist()
         
+        # Calculate ATR for SL/TP calculation
+        atr = calculate_atr(highs, lows, closes, 14)
+        
         signal = None
         probability = 0
         method_used = trading_method
+        entry_price = closes[-1]
         
         if trading_method == 'ICT':
             # Use ICT (Smart Money) analysis
@@ -217,6 +344,8 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_metho
             bias = result.get('weekly_bias', 'NEUTRAL')
             confidence = result.get('confidence', 50)
             trade_setups = result.get('trade_setups', [])
+            premium_discount = result.get('premium_discount', {})
+            htf_levels = result.get('htf_levels', {})
             
             if bias == 'BULLISH' and confidence >= 50:
                 direction = 'BUY'
@@ -226,25 +355,61 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_metho
                 direction = 'WAIT'
             
             if direction != 'WAIT':
-                # Use trade setup if available
+                # Use trade setup if available with proper levels
                 if trade_setups:
                     setup = trade_setups[0]
+                    setup_entry = setup.get('entry', entry_price)
+                    setup_sl = setup.get('stop_loss')
+                    setup_tp = setup.get('take_profit')
+                    
+                    # Validate SL/TP or recalculate
+                    if not setup_sl or not setup_tp:
+                        setup_sl, setup_tp = calculate_sl_tp_levels(
+                            setup_entry, direction, atr, highs, lows, 2.0
+                        )
+                    
+                    # Calculate proper lot size
+                    lots = calculate_lot_size(balance, risk_percent, setup_entry, setup_sl, pair)
+                    
                     signal = {
                         'direction': setup.get('type', direction),
-                        'entry': setup.get('entry', closes[-1]),
-                        'stop_loss': setup.get('stop_loss', closes[-1] * 0.99 if direction == 'BUY' else closes[-1] * 1.01),
-                        'take_profit': setup.get('take_profit', closes[-1] * 1.02 if direction == 'BUY' else closes[-1] * 0.98),
-                        'lots': setup.get('lots', 0.01),
+                        'entry': round(setup_entry, 5),
+                        'stop_loss': round(setup_sl, 5),
+                        'take_profit': round(setup_tp, 5),
+                        'lots': lots,
                         'confidence': confidence
                     }
                 else:
-                    # Generate basic signal from bias
+                    # Generate signal using ICT levels
+                    # Use HTF levels for TP targets
+                    if direction == 'BUY':
+                        # Target: PWH or PDH
+                        tp_target = htf_levels.get('pwh') or htf_levels.get('pdh') or entry_price * 1.015
+                        # SL: Below recent swing low or deep discount
+                        sl_level = premium_discount.get('deep_discount') or entry_price * 0.995
+                    else:
+                        # Target: PWL or PDL
+                        tp_target = htf_levels.get('pwl') or htf_levels.get('pdl') or entry_price * 0.985
+                        # SL: Above recent swing high or deep premium
+                        sl_level = premium_discount.get('deep_premium') or entry_price * 1.005
+                    
+                    # Validate with ATR if levels are too tight
+                    if atr:
+                        min_sl_distance = atr * 1.0
+                        if direction == 'BUY' and (entry_price - sl_level) < min_sl_distance:
+                            sl_level = entry_price - min_sl_distance
+                        elif direction == 'SELL' and (sl_level - entry_price) < min_sl_distance:
+                            sl_level = entry_price + min_sl_distance
+                    
+                    # Calculate lot size
+                    lots = calculate_lot_size(balance, risk_percent, entry_price, sl_level, pair)
+                    
                     signal = {
                         'direction': direction,
-                        'entry': closes[-1],
-                        'stop_loss': closes[-1] * 0.995 if direction == 'BUY' else closes[-1] * 1.005,
-                        'take_profit': closes[-1] * 1.015 if direction == 'BUY' else closes[-1] * 0.985,
-                        'lots': 0.01,
+                        'entry': round(entry_price, 5),
+                        'stop_loss': round(sl_level, 5),
+                        'take_profit': round(tp_target, 5),
+                        'lots': lots,
                         'confidence': confidence
                     }
                 
@@ -270,6 +435,11 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_metho
                 return None
             
             signal = result['signals'][0]
+            
+            # Recalculate lot size if needed
+            if signal.get('lots', 0) <= 0.01:
+                sl = signal.get('stop_loss', entry_price * 0.995)
+                signal['lots'] = calculate_lot_size(balance, risk_percent, entry_price, sl, pair)
             
             # Calculate execution probability
             ensemble_scores = result.get('ensemble_scores', {})
@@ -305,67 +475,108 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_metho
             
             ict_bias = ict_result.get('weekly_bias', 'NEUTRAL') if 'error' not in ict_result else 'NEUTRAL'
             ict_confidence = ict_result.get('confidence', 50) if 'error' not in ict_result else 50
+            htf_levels = ict_result.get('htf_levels', {}) if 'error' not in ict_result else {}
             
             ict_direction = 'BUY' if ict_bias == 'BULLISH' else 'SELL' if ict_bias == 'BEARISH' else 'WAIT'
             
             # Check if ML and ICT agree
             if ml_signal and ml_signal['direction'] == ict_direction:
-                # Both agree - high confidence
-                signal = ml_signal
-                probability = min(95, (ml_probability + ict_confidence) / 2 + 15)  # Bonus for agreement
+                # Both agree - high confidence, use ML signal with ICT TP targets
+                signal = ml_signal.copy()
+                
+                # Enhance TP with ICT levels
+                if ict_direction == 'BUY' and htf_levels.get('pwh'):
+                    signal['take_profit'] = max(signal.get('take_profit', 0), htf_levels['pwh'])
+                elif ict_direction == 'SELL' and htf_levels.get('pwl'):
+                    signal['take_profit'] = min(signal.get('take_profit', float('inf')), htf_levels['pwl'])
+                
+                # Recalculate lots
+                signal['lots'] = calculate_lot_size(
+                    balance, risk_percent, signal['entry'], signal['stop_loss'], pair
+                )
+                
+                probability = min(95, (ml_probability + ict_confidence) / 2 + 15)
                 method_used = 'HYBRID_AGREE'
+                
             elif ml_signal and ml_probability >= 70:
-                # ML has strong signal, use it even if ICT disagrees
-                signal = ml_signal
-                probability = ml_probability * 0.9  # Slight penalty for disagreement
+                signal = ml_signal.copy()
+                signal['lots'] = calculate_lot_size(
+                    balance, risk_percent, signal['entry'], signal['stop_loss'], pair
+                )
+                probability = ml_probability * 0.9
                 method_used = 'HYBRID_ML'
+                
             elif ict_direction != 'WAIT' and ict_confidence >= 70:
-                # ICT has strong signal
-                trade_setups = ict_result.get('trade_setups', [])
-                if trade_setups:
-                    setup = trade_setups[0]
-                    signal = {
-                        'direction': setup.get('type', ict_direction),
-                        'entry': setup.get('entry', closes[-1]),
-                        'stop_loss': setup.get('stop_loss', closes[-1] * 0.99 if ict_direction == 'BUY' else closes[-1] * 1.01),
-                        'take_profit': setup.get('take_profit', closes[-1] * 1.02 if ict_direction == 'BUY' else closes[-1] * 0.98),
-                        'lots': setup.get('lots', 0.01),
-                        'confidence': ict_confidence
-                    }
-                else:
-                    signal = {
-                        'direction': ict_direction,
-                        'entry': closes[-1],
-                        'stop_loss': closes[-1] * 0.995 if ict_direction == 'BUY' else closes[-1] * 1.005,
-                        'take_profit': closes[-1] * 1.015 if ict_direction == 'BUY' else closes[-1] * 0.985,
-                        'lots': 0.01,
-                        'confidence': ict_confidence
-                    }
+                # ICT has strong signal - calculate proper levels
+                stop_loss, take_profit = calculate_sl_tp_levels(
+                    entry_price, ict_direction, atr, highs, lows, 2.0
+                )
+                lots = calculate_lot_size(balance, risk_percent, entry_price, stop_loss, pair)
+                
+                signal = {
+                    'direction': ict_direction,
+                    'entry': round(entry_price, 5),
+                    'stop_loss': stop_loss,
+                    'take_profit': take_profit,
+                    'lots': lots,
+                    'confidence': ict_confidence
+                }
                 probability = ict_confidence * 0.9
                 method_used = 'HYBRID_ICT'
+                
             elif ml_signal:
-                # Use ML signal with lower confidence
-                signal = ml_signal
+                signal = ml_signal.copy()
+                signal['lots'] = calculate_lot_size(
+                    balance, risk_percent, signal['entry'], signal['stop_loss'], pair
+                )
                 probability = ml_probability * 0.8
                 method_used = 'HYBRID_ML_WEAK'
         
         if not signal or signal.get('direction') == 'WAIT':
             return None
         
+        # Final validation - ensure all values are present
+        final_entry = signal.get('entry', entry_price)
+        final_sl = signal.get('stop_loss')
+        final_tp = signal.get('take_profit')
+        
+        if not final_sl or not final_tp:
+            final_sl, final_tp = calculate_sl_tp_levels(
+                final_entry, signal['direction'], atr, highs, lows, 2.0
+            )
+        
+        final_lots = signal.get('lots', 0.01)
+        if final_lots <= 0.01:
+            final_lots = calculate_lot_size(balance, risk_percent, final_entry, final_sl, pair)
+        
+        # Calculate risk/reward ratio
+        if signal['direction'] == 'BUY':
+            risk = final_entry - final_sl
+            reward = final_tp - final_entry
+        else:
+            risk = final_sl - final_entry
+            reward = final_entry - final_tp
+        
+        risk_reward = round(reward / risk, 2) if risk > 0 else 0
+        
         return {
             'pair': pair,
             'direction': signal['direction'],
-            'entry': signal.get('entry', closes[-1]),
-            'stop_loss': signal.get('stop_loss'),
-            'take_profit': signal.get('take_profit'),
-            'lots': signal.get('lots', 0.01),
+            'entry': round(final_entry, 5),
+            'stop_loss': round(final_sl, 5),
+            'take_profit': round(final_tp, 5),
+            'lots': final_lots,
+            'risk_reward': risk_reward,
             'probability': round(probability, 1),
             'confidence': signal.get('confidence', 50),
-            'current_price': closes[-1],
+            'current_price': round(closes[-1], 5),
+            'atr': round(atr, 5) if atr else None,
             'method': method_used
         }
     except Exception as e:
         print(f"Error analyzing {pair} with {trading_method}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
