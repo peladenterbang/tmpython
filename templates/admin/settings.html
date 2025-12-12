@@ -1,0 +1,555 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Settings - Forex Risk Manager{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-gear-fill"></i> Admin Settings</h2>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Admin
+        </a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        <!-- Email Settings (Zoho) -->
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <i class="bi bi-envelope"></i> Email Settings (Zoho Mail)
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin_update_settings') }}">
+                        <input type="hidden" name="settings_type" value="email">
+                        
+                        <!-- Enable Email -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="email_enabled" 
+                                       name="email_enabled" 
+                                       {{ 'checked' if settings.get('email_enabled', 'false') == 'true' else '' }}>
+                                <label class="form-check-label" for="email_enabled">
+                                    <strong>Enable Email Sending</strong>
+                                </label>
+                            </div>
+                            <small class="text-muted">Enable to send password reset, notifications, and invoice emails</small>
+                        </div>
+
+                        <!-- SMTP Host -->
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                <label class="form-label" for="smtp_host">
+                                    <i class="bi bi-server"></i> SMTP Host
+                                </label>
+                                <input type="text" class="form-control" id="smtp_host" 
+                                       name="smtp_host"
+                                       value="{{ settings.get('smtp_host', 'smtp.zoho.com') }}"
+                                       placeholder="smtp.zoho.com">
+                                <small class="text-muted">Zoho: smtp.zoho.com or smtppro.zoho.com</small>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label" for="smtp_port">
+                                    <i class="bi bi-hash"></i> SMTP Port
+                                </label>
+                                <select class="form-select" id="smtp_port" name="smtp_port">
+                                    <option value="587" {{ 'selected' if settings.get('smtp_port', '587') == '587' else '' }}>587 (TLS)</option>
+                                    <option value="465" {{ 'selected' if settings.get('smtp_port') == '465' else '' }}>465 (SSL)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Email & Password -->
+                        <div class="mb-3">
+                            <label class="form-label" for="smtp_email">
+                                <i class="bi bi-envelope-at"></i> Email Address
+                            </label>
+                            <input type="email" class="form-control" id="smtp_email" 
+                                   name="smtp_email"
+                                   value="{{ settings.get('smtp_email', '') }}"
+                                   placeholder="noreply@yourdomain.com">
+                            <small class="text-muted">Your Zoho Mail email address</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="smtp_password">
+                                <i class="bi bi-key"></i> App Password
+                            </label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="smtp_password" 
+                                       name="smtp_password"
+                                       value="{{ settings.get('smtp_password', '') }}"
+                                       placeholder="Your Zoho app password">
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('smtp_password')">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                            <small class="text-muted">Use App Password if 2FA is enabled (Zoho → Security → App Passwords)</small>
+                        </div>
+
+                        <!-- Sender Name -->
+                        <div class="mb-3">
+                            <label class="form-label" for="smtp_sender_name">
+                                <i class="bi bi-person"></i> Sender Name
+                            </label>
+                            <input type="text" class="form-control" id="smtp_sender_name" 
+                                   name="smtp_sender_name"
+                                   value="{{ settings.get('smtp_sender_name', 'Forex Risk Manager') }}"
+                                   placeholder="Forex Risk Manager">
+                            <small class="text-muted">Name shown in "From" field</small>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-save"></i> Save Email Settings
+                            </button>
+                            <button type="button" class="btn btn-outline-info" onclick="testEmail()">
+                                <i class="bi bi-send"></i> Send Test Email
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Email Info Panel -->
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-info-circle"></i> Email Status
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tr>
+                            <td>Status</td>
+                            <td>
+                                {% if settings.get('email_enabled', 'false') == 'true' %}
+                                <span class="badge bg-success">Enabled</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Disabled</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>SMTP Host</td>
+                            <td><code>{{ settings.get('smtp_host', 'Not set') }}</code></td>
+                        </tr>
+                        <tr>
+                            <td>Sender</td>
+                            <td><small>{{ settings.get('smtp_email', 'Not configured') }}</small></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-question-circle"></i> Zoho Mail Setup
+                </div>
+                <div class="card-body small">
+                    <ol class="ps-3 mb-0">
+                        <li>Login to <a href="https://mail.zoho.com" target="_blank">mail.zoho.com</a></li>
+                        <li>Go to Settings → Security</li>
+                        <li>Enable 2FA if not already</li>
+                        <li>Generate App Password:
+                            <ul>
+                                <li>Go to App Passwords</li>
+                                <li>Generate new password</li>
+                                <li>Copy and paste above</li>
+                            </ul>
+                        </li>
+                        <li>SMTP Settings:
+                            <ul>
+                                <li>Host: <code>smtp.zoho.com</code></li>
+                                <li>Port: <code>587</code> (TLS)</li>
+                            </ul>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Site Settings -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-globe"></i> Site Settings
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin_update_settings') }}">
+                        <input type="hidden" name="settings_type" value="site">
+                        
+                        <div class="mb-3">
+                            <label class="form-label" for="site_url">
+                                <i class="bi bi-link-45deg"></i> Site URL
+                            </label>
+                            <input type="url" class="form-control" id="site_url" 
+                                   name="site_url"
+                                   value="{{ settings.get('site_url', '') }}"
+                                   placeholder="https://yourdomain.com">
+                            <small class="text-muted">
+                                Full URL without trailing slash. Used for email links (password reset, etc).
+                                Leave empty to auto-detect from request headers.
+                            </small>
+                        </div>
+
+                        <button type="submit" class="btn btn-dark">
+                            <i class="bi bi-save"></i> Save Site Settings
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-info-circle"></i> About Site URL
+                </div>
+                <div class="card-body small">
+                    <p class="mb-2">The Site URL is used for:</p>
+                    <ul class="ps-3 mb-2">
+                        <li>Password reset email links</li>
+                        <li>Email notification links</li>
+                        <li>Invoice download links</li>
+                    </ul>
+                    <p class="mb-0">
+                        <strong>Current:</strong><br>
+                        <code>{{ settings.get('site_url', 'Auto-detect') }}</code>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Midtrans Settings -->
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-credit-card"></i> Midtrans Payment Gateway
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin_update_settings') }}">
+                        <!-- Mode Toggle -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="midtrans_is_production" 
+                                       name="midtrans_is_production" 
+                                       {{ 'checked' if settings.get('midtrans_is_production', 'false') == 'true' else '' }}>
+                                <label class="form-check-label" for="midtrans_is_production">
+                                    <strong>Production Mode</strong>
+                                </label>
+                            </div>
+                            <small class="text-muted">
+                                {% if settings.get('midtrans_is_production', 'false') == 'true' %}
+                                <span class="text-danger"><i class="bi bi-exclamation-triangle"></i> LIVE payments enabled - real money will be charged!</span>
+                                {% else %}
+                                <span class="text-info"><i class="bi bi-info-circle"></i> Sandbox mode - use test cards for testing</span>
+                                {% endif %}
+                            </small>
+                        </div>
+
+                        <!-- Server Key -->
+                        <div class="mb-3">
+                            <label class="form-label" for="midtrans_server_key">
+                                <i class="bi bi-key"></i> Server Key
+                            </label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="midtrans_server_key" 
+                                       name="midtrans_server_key"
+                                       value="{{ settings.get('midtrans_server_key', '') }}"
+                                       placeholder="SB-Mid-server-xxxxx or Mid-server-xxxxx">
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('midtrans_server_key')">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                            <small class="text-muted">Found in Midtrans Dashboard → Settings → Access Keys</small>
+                        </div>
+
+                        <!-- Client Key -->
+                        <div class="mb-3">
+                            <label class="form-label" for="midtrans_client_key">
+                                <i class="bi bi-key-fill"></i> Client Key
+                            </label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="midtrans_client_key" 
+                                       name="midtrans_client_key"
+                                       value="{{ settings.get('midtrans_client_key', '') }}"
+                                       placeholder="SB-Mid-client-xxxxx or Mid-client-xxxxx">
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('midtrans_client_key')">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                            <small class="text-muted">Used for frontend Snap popup</small>
+                        </div>
+
+                        <hr>
+
+                        <!-- Exchange Rate Settings -->
+                        <h6 class="mb-3"><i class="bi bi-currency-exchange"></i> Exchange Rate Settings</h6>
+                        
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="use_live_exchange_rate" 
+                                       name="use_live_exchange_rate"
+                                       {{ 'checked' if settings.get('use_live_exchange_rate', 'true') == 'true' else '' }}
+                                       onchange="toggleManualRate()">
+                                <label class="form-check-label" for="use_live_exchange_rate">
+                                    Use Live Exchange Rate
+                                </label>
+                            </div>
+                            <small class="text-muted">Fetch real-time USD/IDR rate from exchangerate-api.com</small>
+                        </div>
+
+                        <div class="mb-3" id="manualRateDiv">
+                            <label class="form-label" for="usd_to_idr_rate">Manual USD to IDR Rate</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$1 =</span>
+                                <input type="number" class="form-control" id="usd_to_idr_rate" 
+                                       name="usd_to_idr_rate"
+                                       value="{{ settings.get('usd_to_idr_rate', '15500') }}"
+                                       min="1000" max="50000" step="100">
+                                <span class="input-group-text">IDR</span>
+                            </div>
+                            <small class="text-muted">Used as fallback or when live rate is disabled</small>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save"></i> Save Settings
+                            </button>
+                            <button type="button" class="btn btn-outline-info" onclick="testMidtrans()">
+                                <i class="bi bi-check-circle"></i> Test Connection
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Panel -->
+        <div class="col-lg-4">
+            <!-- Current Status -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-info-circle"></i> Current Status
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tr>
+                            <td>Mode</td>
+                            <td>
+                                {% if settings.get('midtrans_is_production', 'false') == 'true' %}
+                                <span class="badge bg-danger">Production</span>
+                                {% else %}
+                                <span class="badge bg-info">Sandbox</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Exchange Rate</td>
+                            <td><strong>Rp {{ "{:,.0f}".format(current_rate) }}</strong>/USD</td>
+                        </tr>
+                        <tr>
+                            <td>Rate Source</td>
+                            <td>
+                                {% if settings.get('use_live_exchange_rate', 'true') == 'true' %}
+                                <span class="badge bg-success">Live</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Manual</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- How to Get Keys -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-question-circle"></i> How to Get API Keys
+                </div>
+                <div class="card-body small">
+                    <p class="mb-2"><strong>Sandbox (Testing):</strong></p>
+                    <ol class="ps-3 mb-3">
+                        <li>Go to <a href="https://dashboard.sandbox.midtrans.com" target="_blank">dashboard.sandbox.midtrans.com</a></li>
+                        <li>Register/Login</li>
+                        <li>Go to Settings → Access Keys</li>
+                        <li>Copy Server Key & Client Key</li>
+                    </ol>
+                    
+                    <p class="mb-2"><strong>Production (Live):</strong></p>
+                    <ol class="ps-3 mb-0">
+                        <li>Go to <a href="https://dashboard.midtrans.com" target="_blank">dashboard.midtrans.com</a></li>
+                        <li>Complete KYC verification</li>
+                        <li>Go to Settings → Access Keys</li>
+                        <li>Copy Server Key & Client Key</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Test Cards -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-credit-card"></i> Sandbox Test Cards
+                </div>
+                <div class="card-body small">
+                    <table class="table table-sm mb-0">
+                        <tr>
+                            <td>Visa (Success)</td>
+                            <td><code>4811 1111 1111 1114</code></td>
+                        </tr>
+                        <tr>
+                            <td>Mastercard</td>
+                            <td><code>5211 1111 1111 1117</code></td>
+                        </tr>
+                        <tr>
+                            <td>Visa (Denied)</td>
+                            <td><code>4911 1111 1111 1113</code></td>
+                        </tr>
+                        <tr>
+                            <td>Expiry</td>
+                            <td>Any future date</td>
+                        </tr>
+                        <tr>
+                            <td>CVV</td>
+                            <td>Any 3 digits</td>
+                        </tr>
+                        <tr>
+                            <td>OTP</td>
+                            <td><code>112233</code></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Test Result Modal -->
+<div class="modal fade" id="testModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Connection Test</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center" id="testModalBody">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Testing...</span>
+                </div>
+                <p class="mt-2">Testing Midtrans connection...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function togglePassword(inputId) {
+    const input = document.getElementById(inputId);
+    input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function toggleManualRate() {
+    const useLive = document.getElementById('use_live_exchange_rate').checked;
+    const manualDiv = document.getElementById('manualRateDiv');
+    manualDiv.style.opacity = useLive ? '0.5' : '1';
+}
+
+// Initial state
+toggleManualRate();
+
+async function testEmail() {
+    const modal = new bootstrap.Modal(document.getElementById('testModal'));
+    const body = document.getElementById('testModalBody');
+    
+    body.innerHTML = `
+        <div class="spinner-border text-success" role="status">
+            <span class="visually-hidden">Sending...</span>
+        </div>
+        <p class="mt-2">Sending test email...</p>
+    `;
+    modal.show();
+    
+    try {
+        const response = await fetch('/admin/settings/test-email');
+        const data = await response.json();
+        
+        if (data.success) {
+            body.innerHTML = `
+                <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                <h5 class="mt-3 text-success">Email Sent!</h5>
+                <p class="text-muted mb-0">${data.message}</p>
+            `;
+        } else {
+            body.innerHTML = `
+                <i class="bi bi-x-circle-fill text-danger" style="font-size: 3rem;"></i>
+                <h5 class="mt-3 text-danger">Failed to Send</h5>
+                <p class="text-muted">${data.message}</p>
+                ${data.error ? `<small class="text-danger">${data.error}</small>` : ''}
+            `;
+        }
+    } catch (error) {
+        body.innerHTML = `
+            <i class="bi bi-x-circle-fill text-danger" style="font-size: 3rem;"></i>
+            <h5 class="mt-3 text-danger">Error</h5>
+            <p class="text-muted">${error.message}</p>
+        `;
+    }
+}
+
+async function testMidtrans() {
+    const modal = new bootstrap.Modal(document.getElementById('testModal'));
+    const body = document.getElementById('testModalBody');
+    
+    body.innerHTML = `
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Testing...</span>
+        </div>
+        <p class="mt-2">Testing Midtrans connection...</p>
+    `;
+    modal.show();
+    
+    try {
+        const response = await fetch('/admin/settings/test-midtrans');
+        const data = await response.json();
+        
+        if (data.success) {
+            body.innerHTML = `
+                <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                <h5 class="mt-3 text-success">${data.message}</h5>
+                <p class="text-muted mb-0">Mode: ${data.mode}</p>
+                <p class="text-muted small">Key: ${data.server_key_preview}</p>
+            `;
+        } else {
+            body.innerHTML = `
+                <i class="bi bi-x-circle-fill text-danger" style="font-size: 3rem;"></i>
+                <h5 class="mt-3 text-danger">Connection Failed</h5>
+                <p class="text-muted">${data.message}</p>
+                ${data.details ? `<small class="text-muted">${data.details}</small>` : ''}
+            `;
+        }
+    } catch (error) {
+        body.innerHTML = `
+            <i class="bi bi-x-circle-fill text-danger" style="font-size: 3rem;"></i>
+            <h5 class="mt-3 text-danger">Error</h5>
+            <p class="text-muted">${error.message}</p>
+        `;
+    }
+}
+</script>
+{% endblock %}

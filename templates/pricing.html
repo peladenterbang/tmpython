@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}Pricing - Forex Risk Manager{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="text-center mb-5">
+        <h1 class="fw-bold">Choose Your Plan</h1>
+        <p class="text-muted">Upgrade to unlock premium features and maximize your trading potential</p>
+        <small class="text-info">
+            <i class="bi bi-info-circle"></i> 
+            Exchange Rate: $1 = Rp {{ "{:,.0f}".format(exchange_rate) }}
+        </small>
+    </div>
+
+    <!-- Current Plan Badge -->
+    {% if user.subscription_plan != 'free' %}
+    <div class="alert alert-success text-center mb-4">
+        <i class="bi bi-check-circle"></i>
+        <strong>Current Plan:</strong> {{ user.subscription_plan|upper }}
+        {% if user.subscription_expires %}
+        | Expires: {{ user.subscription_expires[:10] if user.subscription_expires else 'N/A' }}
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Pricing Cards -->
+    <div class="row justify-content-center g-4">
+        <!-- Free Plan -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 {% if user.subscription_plan == 'free' %}border-primary{% endif %}">
+                <div class="card-header text-center py-3 {% if user.subscription_plan == 'free' %}bg-primary text-white{% else %}bg-light{% endif %}">
+                    <h4 class="mb-0">{{ plans.free.name }}</h4>
+                </div>
+                <div class="card-body text-center">
+                    <div class="display-4 fw-bold mb-3">
+                        $0
+                        <small class="fs-6 text-muted">/forever</small>
+                    </div>
+                    <p class="text-muted mb-4">Get started with basic features</p>
+                    <ul class="list-unstyled text-start mb-4">
+                        {% for feature in plans.free.features %}
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            {{ feature }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="card-footer bg-transparent border-0 text-center pb-4">
+                    {% if user.subscription_plan == 'free' %}
+                    <button class="btn btn-outline-primary w-100" disabled>
+                        <i class="bi bi-check"></i> Current Plan
+                    </button>
+                    {% else %}
+                    <span class="text-muted">Free forever</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Basic Plan -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 {% if user.subscription_plan == 'basic' %}border-primary{% endif %} shadow">
+                <div class="card-header text-center py-3 bg-primary text-white position-relative">
+                    <span class="badge bg-warning text-dark position-absolute top-0 start-50 translate-middle">
+                        POPULAR
+                    </span>
+                    <h4 class="mb-0">{{ plans.basic.name }}</h4>
+                </div>
+                <div class="card-body text-center">
+                    <div class="display-4 fw-bold text-primary mb-1">
+                        ${{ "%.2f"|format(plans.basic.price_usd) }}
+                        <small class="fs-6 text-muted">/month</small>
+                    </div>
+                    <p class="text-muted small mb-3">
+                        ≈ Rp {{ "{:,.0f}".format(plans.basic.price_idr) }}
+                    </p>
+                    <ul class="list-unstyled text-start mb-4">
+                        {% for feature in plans.basic.features %}
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            {{ feature }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="card-footer bg-transparent border-0 text-center pb-4">
+                    {% if user.subscription_plan == 'basic' %}
+                    <button class="btn btn-success w-100" disabled>
+                        <i class="bi bi-check"></i> Current Plan
+                    </button>
+                    {% elif user.subscription_plan == 'pro' %}
+                    <button class="btn btn-outline-secondary w-100" disabled>
+                        Included in Pro
+                    </button>
+                    {% else %}
+                    <button class="btn btn-primary w-100 btn-subscribe" data-plan="basic">
+                        <i class="bi bi-credit-card"></i> Subscribe Now
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Pro Plan -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 {% if user.subscription_plan == 'pro' %}border-primary{% endif %}">
+                <div class="card-header text-center py-3 bg-dark text-white">
+                    <h4 class="mb-0">{{ plans.pro.name }}</h4>
+                </div>
+                <div class="card-body text-center">
+                    <div class="display-4 fw-bold mb-1">
+                        ${{ "%.2f"|format(plans.pro.price_usd) }}
+                        <small class="fs-6 text-muted">/month</small>
+                    </div>
+                    <p class="text-muted small mb-3">
+                        ≈ Rp {{ "{:,.0f}".format(plans.pro.price_idr) }}
+                    </p>
+                    <ul class="list-unstyled text-start mb-4">
+                        {% for feature in plans.pro.features %}
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            {{ feature }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="card-footer bg-transparent border-0 text-center pb-4">
+                    {% if user.subscription_plan == 'pro' %}
+                    <button class="btn btn-success w-100" disabled>
+                        <i class="bi bi-check"></i> Current Plan
+                    </button>
+                    {% else %}
+                    <button class="btn btn-dark w-100 btn-subscribe" data-plan="pro">
+                        <i class="bi bi-credit-card"></i> Subscribe Now
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Methods -->
+    <div class="text-center mt-5">
+        <h6 class="text-muted mb-3">Accepted Payment Methods</h6>
+        <div class="d-flex justify-content-center gap-3 flex-wrap">
+            <span class="badge bg-light text-dark border px-3 py-2">
+                <i class="bi bi-credit-card"></i> Visa
+            </span>
+            <span class="badge bg-light text-dark border px-3 py-2">
+                <i class="bi bi-credit-card"></i> Mastercard
+            </span>
+            <span class="badge bg-light text-dark border px-3 py-2">
+                <i class="bi bi-credit-card"></i> JCB
+            </span>
+            <span class="badge bg-light text-dark border px-3 py-2">
+                <i class="bi bi-bank"></i> Bank Transfer
+            </span>
+            <span class="badge bg-light text-dark border px-3 py-2">
+                <i class="bi bi-wallet2"></i> E-Wallet
+            </span>
+            <span class="badge bg-light text-dark border px-3 py-2">
+                <i class="bi bi-shop"></i> Retail (Alfamart/Indomaret)
+            </span>
+        </div>
+        <p class="text-muted small mt-3">
+            <i class="bi bi-shield-check"></i> Secure payment powered by Midtrans
+        </p>
+    </div>
+
+    <!-- Recent Payments -->
+    {% if payments %}
+    <div class="mt-5">
+        <h5 class="mb-3">Recent Payments</h5>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Plan</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in payments %}
+                    <tr>
+                        <td>{{ payment.created_at[:16] if payment.created_at else '-' }}</td>
+                        <td>{{ payment.plan|upper }}</td>
+                        <td>
+                            ${{ "%.2f"|format(payment.amount_usd) if payment.amount_usd else '-' }}
+                            <small class="text-muted">(Rp {{ "{:,.0f}".format(payment.amount_idr) if payment.amount_idr else '-' }})</small>
+                        </td>
+                        <td>
+                            {% if payment.status == 'paid' %}
+                            <span class="badge bg-success">Paid</span>
+                            {% elif payment.status == 'pending' %}
+                            <span class="badge bg-warning">Pending</span>
+                            {% elif payment.status == 'failed' %}
+                            <span class="badge bg-danger">Failed</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ payment.status }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <a href="{{ url_for('payment_history') }}" class="btn btn-sm btn-outline-secondary">
+            View All Payments <i class="bi bi-arrow-right"></i>
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- FAQ -->
+    <div class="mt-5">
+        <h5 class="mb-3">Frequently Asked Questions</h5>
+        <div class="accordion" id="faqAccordion">
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                        How does billing work?
+                    </button>
+                </h2>
+                <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                    <div class="accordion-body">
+                        You'll be charged once for a 30-day subscription. Your subscription will need to be renewed manually when it expires. We don't auto-renew.
+                    </div>
+                </div>
+            </div>
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                        Can I upgrade/downgrade my plan?
+                    </button>
+                </h2>
+                <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                    <div class="accordion-body">
+                        Yes! You can upgrade anytime. Your new plan will start immediately and any remaining days from your current plan will be added.
+                    </div>
+                </div>
+            </div>
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                        What payment methods are accepted?
+                    </button>
+                </h2>
+                <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                    <div class="accordion-body">
+                        We accept Visa, Mastercard, JCB credit/debit cards, bank transfers (BCA, BNI, BRI, Mandiri, Permata), e-wallets (GoPay, OVO, DANA, ShopeePay), and retail payments (Alfamart, Indomaret).
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Processing Modal -->
+<div class="modal fade" id="processingModal" data-bs-backdrop="static" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center py-5">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h5>Preparing Payment...</h5>
+                <p class="text-muted mb-0">Please wait while we connect to the payment gateway.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Midtrans Snap JS -->
+<script src="{{ snap_url }}" data-client-key="{{ midtrans_client_key }}"></script>
+
+<script>
+document.querySelectorAll('.btn-subscribe').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const plan = this.dataset.plan;
+        const processingModal = new bootstrap.Modal(document.getElementById('processingModal'));
+        
+        try {
+            // Show loading
+            processingModal.show();
+            this.disabled = true;
+            
+            // Create payment
+            const response = await fetch('/create-payment', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ plan: plan })
+            });
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Hide loading
+            processingModal.hide();
+            
+            // Open Midtrans Snap
+            if (data.token) {
+                window.snap.pay(data.token, {
+                    onSuccess: function(result) {
+                        window.location.href = '/payment-finish?order_id=' + data.order_id + '&transaction_status=success';
+                    },
+                    onPending: function(result) {
+                        window.location.href = '/payment-finish?order_id=' + data.order_id + '&transaction_status=pending';
+                    },
+                    onError: function(result) {
+                        window.location.href = '/payment-finish?order_id=' + data.order_id + '&transaction_status=error';
+                    },
+                    onClose: function() {
+                        // User closed the popup without finishing payment
+                        alert('Payment cancelled. You can try again anytime.');
+                    }
+                });
+            } else if (data.redirect_url) {
+                // Fallback to redirect
+                window.location.href = data.redirect_url;
+            }
+            
+        } catch (error) {
+            processingModal.hide();
+            alert('Error: ' + error.message);
+        } finally {
+            this.disabled = false;
+        }
+    });
+});
+</script>
+{% endblock %}

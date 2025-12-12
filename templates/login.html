@@ -285,12 +285,18 @@
                     </div>
                 </div>
                 
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="form-label">Password</label>
                     <div class="input-group">
                         <span class="input-group-text"><i class="bi bi-lock"></i></span>
                         <input type="password" name="password" class="form-control" placeholder="Enter your password" required>
                     </div>
+                </div>
+                
+                <div class="mb-4 text-end">
+                    <a href="{{ url_for('forgot_password') }}" class="text-decoration-none" style="color: #2563eb; font-size: 0.85rem;">
+                        Forgot password?
+                    </a>
                 </div>
                 
                 <button type="submit" class="btn btn-login">

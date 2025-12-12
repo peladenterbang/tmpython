@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash
+from werkzeug.middleware.proxy_fix import ProxyFix
 import sqlite3
 from datetime import datetime, timedelta
 import yfinance as yf
@@ -7,6 +8,11 @@ import os
 import requests
 import base64
 import io
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -102,16 +108,415 @@ app = Flask(__name__)
 app.secret_key = 'forex-risk-manager-secret-key-2024'
 DATABASE = 'database.db'
 
+# Fix for reverse proxy (Nginx) - ensures correct URL generation
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+# Add datetime to Jinja2 templates
+@app.context_processor
+def inject_now():
+    return {'now': datetime.now}
+
 # Telegram Configuration (User can set their own bot token and chat ID)
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
+# Default exchange rate (USD to IDR) - will be updated dynamically
+DEFAULT_USD_TO_IDR = 15500
+
+
+def get_app_setting(key, default=None):
+    """Get app setting from database"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        conn.row_factory = sqlite3.Row
+        result = conn.execute('SELECT setting_value FROM app_settings WHERE setting_key = ?', (key,)).fetchone()
+        conn.close()
+        return result['setting_value'] if result else default
+    except:
+        return default
+
+
+def set_app_setting(key, value):
+    """Set app setting in database"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        conn.execute('''
+            INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) 
+            VALUES (?, ?, ?)
+        ''', (key, value, datetime.now()))
+        conn.commit()
+        conn.close()
+        return True
+    except:
+        return False
+
+
+def get_midtrans_config():
+    """Get Midtrans configuration from database"""
+    server_key = get_app_setting('midtrans_server_key', 'SB-Mid-server-YOUR_SERVER_KEY')
+    client_key = get_app_setting('midtrans_client_key', 'SB-Mid-client-YOUR_CLIENT_KEY')
+    is_production = get_app_setting('midtrans_is_production', 'false').lower() == 'true'
+    
+    if is_production:
+        api_url = 'https://app.midtrans.com/snap/v1'
+        snap_url = 'https://app.midtrans.com/snap/snap.js'
+    else:
+        api_url = 'https://app.sandbox.midtrans.com/snap/v1'
+        snap_url = 'https://app.sandbox.midtrans.com/snap/snap.js'
+    
+    return {
+        'server_key': server_key,
+        'client_key': client_key,
+        'is_production': is_production,
+        'api_url': api_url,
+        'snap_url': snap_url
+    }
+
 # Subscription Plans
 SUBSCRIPTION_PLANS = {
-    'free': {'name': 'Free', 'price': 0, 'days': 0, 'features': ['Dashboard', 'Calculator', '5 trades/month']},
-    'basic': {'name': 'Basic', 'price': 9.99, 'days': 30, 'features': ['All Free features', 'ICT Analysis', 'Unlimited trades']},
-    'pro': {'name': 'Pro', 'price': 29.99, 'days': 30, 'features': ['All Basic features', 'ML Predictions', 'Priority support']}
+    'free': {
+        'name': 'Free', 
+        'price_usd': 0, 
+        'days': 0, 
+        'features': ['Dashboard Access', 'Position Calculator', '5 Analyses/Day', 'Basic Charts']
+    },
+    'basic': {
+        'name': 'Basic', 
+        'price_usd': 9.99, 
+        'days': 30, 
+        'features': ['All Free Features', 'ICT Analysis', 'ML Predictions', 'Unlimited Analyses', 'Auto Execution (5 pairs)']
+    },
+    'pro': {
+        'name': 'Pro', 
+        'price_usd': 29.99, 
+        'days': 30, 
+        'features': ['All Basic Features', 'ARIMA Forecasting', 'Auto Execution (All pairs)', 'PDF Reports', 'Telegram Alerts', 'Priority Support']
+    }
 }
+
+# Input validation constants
+VALID_PERIODS = {'1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max'}
+VALID_INTERVALS = {'1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '4h', '1d', '5d', '1wk', '1mo', '3mo'}
+VALID_PLANS = {'free', 'basic', 'pro'}
+VALID_TRADE_TYPES = {'BUY', 'SELL', 'buy', 'sell'}
+VALID_TRADE_STATUS = {'open', 'closed'}
+
+
+def get_email_config():
+    """Get email configuration from database"""
+    conn = get_db()
+    settings = {}
+    rows = conn.execute('SELECT setting_key, setting_value FROM app_settings WHERE setting_key LIKE "smtp_%" OR setting_key = "email_enabled"').fetchall()
+    conn.close()
+    for row in rows:
+        settings[row['setting_key']] = row['setting_value']
+    return settings
+
+
+def get_site_url():
+    """Get site URL from database setting or use request host"""
+    site_url = get_app_setting('site_url')
+    if site_url:
+        return site_url.rstrip('/')
+    # Fallback: try to get from request (works with ProxyFix)
+    try:
+        return request.host_url.rstrip('/')
+    except:
+        return 'http://localhost:5000'
+
+
+def send_email(to_email, subject, html_content, text_content=None, attachment=None, attachment_name=None):
+    """Send email via SMTP (Zoho Mail or other provider)"""
+    config = get_email_config()
+    
+    if config.get('email_enabled', 'false') != 'true':
+        return {'success': False, 'message': 'Email sending is disabled'}
+    
+    smtp_host = config.get('smtp_host', 'smtp.zoho.com')
+    smtp_port = int(config.get('smtp_port', '587'))
+    smtp_email = config.get('smtp_email', '')
+    smtp_password = config.get('smtp_password', '')
+    sender_name = config.get('smtp_sender_name', 'Forex Risk Manager')
+    
+    if not smtp_email or not smtp_password:
+        return {'success': False, 'message': 'SMTP credentials not configured'}
+    
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['From'] = f"{sender_name} <{smtp_email}>"
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        
+        if text_content:
+            msg.attach(MIMEText(text_content, 'plain'))
+        msg.attach(MIMEText(html_content, 'html'))
+        
+        if attachment and attachment_name:
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(attachment)
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', f'attachment; filename="{attachment_name}"')
+            msg.attach(part)
+        
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30)
+        else:
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+            server.starttls()
+        
+        server.login(smtp_email, smtp_password)
+        server.sendmail(smtp_email, to_email, msg.as_string())
+        server.quit()
+        
+        return {'success': True, 'message': f'Email sent to {to_email}'}
+    except smtplib.SMTPAuthenticationError:
+        return {'success': False, 'message': 'SMTP authentication failed. Check email and password.'}
+    except smtplib.SMTPException as e:
+        return {'success': False, 'message': f'SMTP error: {str(e)}'}
+    except Exception as e:
+        return {'success': False, 'message': f'Error: {str(e)}'}
+
+
+def send_password_reset_email(to_email, user_name, reset_url):
+    """Send password reset email"""
+    subject = "Reset Your Password - Forex Risk Manager"
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: #1f2937; color: white; padding: 30px; text-align: center; }}
+            .content {{ padding: 30px; background: #f9fafb; }}
+            .button {{ display: inline-block; background: #2563eb; color: white; padding: 12px 30px; text-decoration: none; margin: 20px 0; }}
+            .footer {{ padding: 20px; text-align: center; color: #6b7280; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1 style="margin:0;">Forex Risk Manager</h1>
+            </div>
+            <div class="content">
+                <h2>Password Reset Request</h2>
+                <p>Hello {user_name},</p>
+                <p>We received a request to reset your password. Click the button below to create a new password:</p>
+                <p style="text-align: center;">
+                    <a href="{reset_url}" class="button" style="color: white;">Reset Password</a>
+                </p>
+                <p>This link will expire in <strong>1 hour</strong>.</p>
+                <p>If you didn't request this, you can safely ignore this email.</p>
+                <p style="margin-top: 30px;">
+                    <small>Or copy this link: {reset_url}</small>
+                </p>
+            </div>
+            <div class="footer">
+                <p>Forex Risk Manager - Professional Trading Risk Management</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    text_content = f"""
+    Password Reset Request
+    
+    Hello {user_name},
+    
+    We received a request to reset your password. Click the link below:
+    {reset_url}
+    
+    This link will expire in 1 hour.
+    
+    If you didn't request this, you can safely ignore this email.
+    """
+    
+    return send_email(to_email, subject, html_content, text_content)
+
+
+def send_email_change_notification(to_email, user_name, new_email):
+    """Send notification about email change"""
+    subject = "Email Address Changed - Forex Risk Manager"
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: #1f2937; color: white; padding: 30px; text-align: center; }}
+            .content {{ padding: 30px; background: #f9fafb; }}
+            .alert {{ background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; }}
+            .footer {{ padding: 20px; text-align: center; color: #6b7280; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1 style="margin:0;">Forex Risk Manager</h1>
+            </div>
+            <div class="content">
+                <h2>Email Address Changed</h2>
+                <p>Hello {user_name},</p>
+                <p>Your account email has been changed to: <strong>{new_email}</strong></p>
+                <div class="alert">
+                    <strong>Security Notice:</strong> If you did not make this change, please contact support immediately.
+                </div>
+                <p>You can now use your new email address to log in.</p>
+            </div>
+            <div class="footer">
+                <p>Forex Risk Manager - Professional Trading Risk Management</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return send_email(to_email, subject, html_content)
+
+
+def send_invoice_email(to_email, user_name, order_id, plan_name, amount_usd, amount_idr, payment_date):
+    """Send invoice email after successful payment"""
+    subject = f"Payment Confirmation - Order #{order_id}"
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: #1f2937; color: white; padding: 30px; text-align: center; }}
+            .content {{ padding: 30px; background: #f9fafb; }}
+            .invoice {{ background: white; border: 1px solid #e5e7eb; padding: 20px; margin: 20px 0; }}
+            .invoice-header {{ border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-bottom: 15px; }}
+            .invoice-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }}
+            .invoice-total {{ font-size: 18px; font-weight: bold; color: #2563eb; }}
+            .success {{ background: #d1fae5; color: #065f46; padding: 15px; text-align: center; margin: 20px 0; }}
+            .footer {{ padding: 20px; text-align: center; color: #6b7280; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1 style="margin:0;">Forex Risk Manager</h1>
+            </div>
+            <div class="content">
+                <div class="success">
+                    <strong>Payment Successful!</strong>
+                </div>
+                
+                <p>Hello {user_name},</p>
+                <p>Thank you for your purchase. Your subscription has been activated.</p>
+                
+                <div class="invoice">
+                    <div class="invoice-header">
+                        <strong>INVOICE</strong><br>
+                        <small>Order ID: {order_id}</small>
+                    </div>
+                    <table style="width: 100%;">
+                        <tr>
+                            <td>Plan</td>
+                            <td style="text-align: right;"><strong>{plan_name}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Date</td>
+                            <td style="text-align: right;">{payment_date}</td>
+                        </tr>
+                        <tr>
+                            <td>Amount (USD)</td>
+                            <td style="text-align: right;">${amount_usd:.2f}</td>
+                        </tr>
+                        <tr>
+                            <td>Amount (IDR)</td>
+                            <td style="text-align: right;">Rp {amount_idr:,.0f}</td>
+                        </tr>
+                        <tr style="border-top: 2px solid #e5e7eb;">
+                            <td><strong>Total Paid</strong></td>
+                            <td style="text-align: right;" class="invoice-total">Rp {amount_idr:,.0f}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <p>Your {plan_name} subscription is now active. Enjoy all the premium features!</p>
+            </div>
+            <div class="footer">
+                <p>Forex Risk Manager - Professional Trading Risk Management</p>
+                <p>This is an automated email. Please do not reply.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return send_email(to_email, subject, html_content)
+
+
+def sanitize_string(value, max_length=100, allowed_chars=None):
+    """Sanitize string input to prevent injection attacks"""
+    if value is None:
+        return None
+    value = str(value).strip()
+    if len(value) > max_length:
+        value = value[:max_length]
+    if allowed_chars:
+        value = ''.join(c for c in value if c in allowed_chars)
+    return value
+
+
+def validate_pair(pair):
+    """Validate trading pair against whitelist"""
+    if not pair or not isinstance(pair, str):
+        return None
+    pair = pair.strip().upper().replace('_', '/')
+    # Check if pair exists in our ticker list
+    for valid_pair in FOREX_TICKERS.keys():
+        if pair == valid_pair.upper():
+            return valid_pair
+    return None
+
+
+def validate_period(period):
+    """Validate period against whitelist"""
+    if period and period.lower() in VALID_PERIODS:
+        return period.lower()
+    return '1mo'
+
+
+def validate_interval(interval):
+    """Validate interval against whitelist"""
+    if interval and interval.lower() in VALID_INTERVALS:
+        return interval.lower()
+    return '1h'
+
+
+def validate_number(value, min_val=None, max_val=None, default=0):
+    """Validate and sanitize numeric input"""
+    try:
+        num = float(value)
+        if min_val is not None and num < min_val:
+            return min_val
+        if max_val is not None and num > max_val:
+            return max_val
+        return num
+    except (TypeError, ValueError):
+        return default
+
+
+def validate_int(value, min_val=None, max_val=None, default=0):
+    """Validate and sanitize integer input"""
+    try:
+        num = int(value)
+        if min_val is not None and num < min_val:
+            return min_val
+        if max_val is not None and num > max_val:
+            return max_val
+        return num
+    except (TypeError, ValueError):
+        return default
 
 
 def hash_password(password):
@@ -313,11 +718,190 @@ def logout():
     return redirect(url_for('login'))
 
 
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    """Request password reset"""
+    if session.get('user_id'):
+        return redirect(url_for('index'))
+    
+    message = None
+    error = None
+    
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        
+        if not email:
+            error = 'Please enter your email address.'
+        else:
+            conn = get_db()
+            user = conn.execute('SELECT id, name FROM users WHERE email = ?', (email,)).fetchone()
+            
+            if user:
+                # Generate secure token
+                import secrets
+                token = secrets.token_urlsafe(32)
+                expires = datetime.now() + timedelta(hours=1)
+                
+                conn.execute('UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?',
+                           (token, expires, user['id']))
+                conn.commit()
+                
+                # Generate reset URL using site_url setting or ProxyFix headers
+                site_url = get_site_url()
+                reset_url = f"{site_url}/reset-password/{token}"
+                
+                # Try to send email
+                email_result = send_password_reset_email(email, user['name'], reset_url)
+                
+                if email_result['success']:
+                    message = 'Password reset link has been sent to your email.'
+                else:
+                    # If email fails, show the link directly (for development/testing)
+                    message = 'Email sending failed. Please use the link below:'
+                    flash(f'Reset link: {reset_url}', 'info')
+            else:
+                # Don't reveal if email exists or not (security)
+                message = 'If an account with that email exists, a reset link has been sent.'
+            
+            conn.close()
+    
+    return render_template('forgot_password.html', message=message, error=error)
+
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    """Reset password using token"""
+    if session.get('user_id'):
+        return redirect(url_for('index'))
+    
+    conn = get_db()
+    user = conn.execute('''
+        SELECT id, email, name FROM users 
+        WHERE reset_token = ? AND reset_token_expires > ?
+    ''', (token, datetime.now())).fetchone()
+    
+    if not user:
+        conn.close()
+        flash('Invalid or expired reset link. Please request a new one.', 'error')
+        return redirect(url_for('forgot_password'))
+    
+    error = None
+    
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        
+        if len(password) < 6:
+            error = 'Password must be at least 6 characters.'
+        elif password != confirm_password:
+            error = 'Passwords do not match.'
+        else:
+            hashed = hash_password(password)
+            conn.execute('UPDATE users SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
+                        (hashed, user['id']))
+            conn.commit()
+            conn.close()
+            
+            flash('Password has been reset successfully. You can now login.', 'success')
+            return redirect(url_for('login'))
+    
+    conn.close()
+    return render_template('reset_password.html', token=token, email=user['email'])
+
+
+@app.route('/change-password', methods=['POST'])
+@login_required
+def change_password():
+    """Change password for logged in user"""
+    current_password = request.form.get('current_password', '')
+    new_password = request.form.get('new_password', '')
+    confirm_password = request.form.get('confirm_password', '')
+    
+    conn = get_db()
+    user = conn.execute('SELECT password FROM users WHERE id = ?', (session['user_id'],)).fetchone()
+    
+    if not verify_password(user['password'], current_password):
+        conn.close()
+        flash('Current password is incorrect.', 'error')
+        return redirect(url_for('settings'))
+    
+    if len(new_password) < 6:
+        conn.close()
+        flash('New password must be at least 6 characters.', 'error')
+        return redirect(url_for('settings'))
+    
+    if new_password != confirm_password:
+        conn.close()
+        flash('New passwords do not match.', 'error')
+        return redirect(url_for('settings'))
+    
+    hashed = hash_password(new_password)
+    conn.execute('UPDATE users SET password = ? WHERE id = ?', (hashed, session['user_id']))
+    conn.commit()
+    conn.close()
+    
+    flash('Password changed successfully!', 'success')
+    return redirect(url_for('settings'))
+
+
+@app.route('/change-email', methods=['POST'])
+@login_required
+def change_email():
+    """Change email for logged in user"""
+    new_email = request.form.get('new_email', '').strip().lower()
+    password = request.form.get('password', '')
+    
+    if not new_email:
+        flash('Please enter a new email address.', 'error')
+        return redirect(url_for('settings'))
+    
+    # Basic email validation
+    import re
+    if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', new_email):
+        flash('Please enter a valid email address.', 'error')
+        return redirect(url_for('settings'))
+    
+    conn = get_db()
+    user = conn.execute('SELECT password, email FROM users WHERE id = ?', (session['user_id'],)).fetchone()
+    
+    if not verify_password(user['password'], password):
+        conn.close()
+        flash('Password is incorrect.', 'error')
+        return redirect(url_for('settings'))
+    
+    if new_email == user['email']:
+        conn.close()
+        flash('New email is the same as current email.', 'error')
+        return redirect(url_for('settings'))
+    
+    # Check if email already exists
+    existing = conn.execute('SELECT id FROM users WHERE email = ? AND id != ?', 
+                           (new_email, session['user_id'])).fetchone()
+    if existing:
+        conn.close()
+        flash('Email address is already in use.', 'error')
+        return redirect(url_for('settings'))
+    
+    old_email = user['email']
+    user_name = session.get('user_name', 'User')
+    
+    conn.execute('UPDATE users SET email = ? WHERE id = ?', (new_email, session['user_id']))
+    conn.commit()
+    conn.close()
+    
+    # Send notification to old email
+    send_email_change_notification(old_email, user_name, new_email)
+    
+    session['user_email'] = new_email
+    flash('Email changed successfully!', 'success')
+    return redirect(url_for('settings'))
+
+
 @app.route('/subscription')
 @login_required
 def subscription():
-    user = get_current_user()
-    return render_template('subscription.html', plans=SUBSCRIPTION_PLANS, user=user)
+    """Redirect to pricing page"""
+    return redirect(url_for('pricing'))
 
 
 @app.route('/settings')
@@ -405,10 +989,11 @@ def subscribe(plan):
     conn = get_db()
     
     # Create payment record with transaction ID (pending - admin will verify)
+    price_usd = plan_info.get('price_usd', plan_info.get('price', 0))
     conn.execute('''
-        INSERT INTO payments (user_id, amount, plan, status, payment_method, transaction_id)
-        VALUES (?, ?, ?, 'pending', ?, ?)
-    ''', (session['user_id'], plan_info['price'], plan, payment_method, transaction_id))
+        INSERT INTO payments (user_id, amount, amount_usd, plan, status, payment_method, transaction_id)
+        VALUES (?, ?, ?, ?, 'pending', ?, ?)
+    ''', (session['user_id'], price_usd, price_usd, plan, payment_method, transaction_id))
     conn.commit()
     conn.close()
     
@@ -543,6 +1128,31 @@ def admin_delete_user(user_id):
     return redirect(url_for('admin_users'))
 
 
+def fetch_midtrans_transaction(order_id):
+    """Fetch transaction status from Midtrans API"""
+    config = get_midtrans_config()
+    
+    if config['is_production']:
+        api_url = f"https://api.midtrans.com/v2/{order_id}/status"
+    else:
+        api_url = f"https://api.sandbox.midtrans.com/v2/{order_id}/status"
+    
+    auth_string = base64.b64encode(f"{config['server_key']}:".encode()).decode()
+    headers = {
+        'Accept': 'application/json',
+        'Authorization': f'Basic {auth_string}'
+    }
+    
+    try:
+        response = requests.get(api_url, headers=headers, timeout=30)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {'error': f'Status {response.status_code}', 'message': response.text[:200]}
+    except Exception as e:
+        return {'error': str(e)}
+
+
 @app.route('/admin/payments')
 @admin_required
 def admin_payments():
@@ -550,11 +1160,148 @@ def admin_payments():
     payments = conn.execute('''
         SELECT p.*, u.name, u.email 
         FROM payments p 
-        JOIN users u ON p.user_id = u.id 
+        LEFT JOIN users u ON p.user_id = u.id 
         ORDER BY p.created_at DESC
     ''').fetchall()
     conn.close()
-    return render_template('admin/payments.html', payments=payments)
+    
+    config = get_midtrans_config()
+    return render_template('admin/payments.html', payments=payments, midtrans_config=config)
+
+
+@app.route('/admin/payments/sync/<order_id>')
+@admin_required
+def admin_sync_payment(order_id):
+    """Sync single payment status from Midtrans"""
+    result = fetch_midtrans_transaction(order_id)
+    
+    if 'error' in result:
+        flash(f'Error fetching from Midtrans: {result.get("error")}', 'error')
+        return redirect(url_for('admin_payments'))
+    
+    # Update local database with Midtrans data
+    transaction_status = result.get('transaction_status', '')
+    fraud_status = result.get('fraud_status', 'accept')
+    payment_type = result.get('payment_type', '')
+    transaction_id = result.get('transaction_id', '')
+    
+    # Determine status
+    if transaction_status == 'capture':
+        status = 'paid' if fraud_status == 'accept' else 'fraud'
+    elif transaction_status == 'settlement':
+        status = 'paid'
+    elif transaction_status in ['cancel', 'deny', 'expire']:
+        status = 'failed'
+    elif transaction_status == 'pending':
+        status = 'pending'
+    else:
+        status = transaction_status or 'unknown'
+    
+    conn = get_db()
+    payment = conn.execute('SELECT * FROM payments WHERE order_id = ?', (order_id,)).fetchone()
+    
+    if payment:
+        conn.execute('''
+            UPDATE payments SET 
+                status = ?, payment_type = ?, midtrans_transaction_id = ?,
+                midtrans_status = ?, fraud_status = ?,
+                paid_at = CASE WHEN ? = 'paid' AND paid_at IS NULL THEN ? ELSE paid_at END
+            WHERE order_id = ?
+        ''', (status, payment_type, transaction_id, transaction_status, fraud_status,
+              status, datetime.now(), order_id))
+        
+        # If payment successful, upgrade user subscription
+        if status == 'paid' and payment['status'] != 'paid':
+            plan = payment['plan']
+            days = SUBSCRIPTION_PLANS.get(plan, {}).get('days', 30)
+            expires = datetime.now() + timedelta(days=days)
+            conn.execute('''
+                UPDATE users SET subscription_plan = ?, subscription_expires = ?
+                WHERE id = ?
+            ''', (plan, expires, payment['user_id']))
+        
+        conn.commit()
+        flash(f'Payment {order_id} synced: {status}', 'success')
+    else:
+        flash(f'Payment {order_id} not found in database', 'error')
+    
+    conn.close()
+    return redirect(url_for('admin_payments'))
+
+
+@app.route('/admin/payments/sync-all')
+@admin_required
+def admin_sync_all_payments():
+    """Sync all pending payments from Midtrans"""
+    conn = get_db()
+    pending_payments = conn.execute('''
+        SELECT order_id FROM payments 
+        WHERE status = 'pending' AND order_id IS NOT NULL AND order_id != ''
+    ''').fetchall()
+    conn.close()
+    
+    synced = 0
+    errors = 0
+    
+    for payment in pending_payments:
+        order_id = payment['order_id']
+        result = fetch_midtrans_transaction(order_id)
+        
+        if 'error' not in result:
+            transaction_status = result.get('transaction_status', '')
+            fraud_status = result.get('fraud_status', 'accept')
+            payment_type = result.get('payment_type', '')
+            transaction_id = result.get('transaction_id', '')
+            
+            if transaction_status == 'capture':
+                status = 'paid' if fraud_status == 'accept' else 'fraud'
+            elif transaction_status == 'settlement':
+                status = 'paid'
+            elif transaction_status in ['cancel', 'deny', 'expire']:
+                status = 'failed'
+            elif transaction_status == 'pending':
+                status = 'pending'
+            else:
+                status = transaction_status or 'unknown'
+            
+            conn = get_db()
+            conn.execute('''
+                UPDATE payments SET 
+                    status = ?, payment_type = ?, midtrans_transaction_id = ?,
+                    midtrans_status = ?, fraud_status = ?,
+                    paid_at = CASE WHEN ? = 'paid' AND paid_at IS NULL THEN ? ELSE paid_at END
+                WHERE order_id = ?
+            ''', (status, payment_type, transaction_id, transaction_status, fraud_status,
+                  status, datetime.now(), order_id))
+            
+            # Upgrade subscription if paid
+            if status == 'paid':
+                payment_data = conn.execute('SELECT * FROM payments WHERE order_id = ?', (order_id,)).fetchone()
+                if payment_data:
+                    plan = payment_data['plan']
+                    days = SUBSCRIPTION_PLANS.get(plan, {}).get('days', 30)
+                    expires = datetime.now() + timedelta(days=days)
+                    conn.execute('''
+                        UPDATE users SET subscription_plan = ?, subscription_expires = ?
+                        WHERE id = ?
+                    ''', (plan, expires, payment_data['user_id']))
+            
+            conn.commit()
+            conn.close()
+            synced += 1
+        else:
+            errors += 1
+    
+    flash(f'Synced {synced} payments, {errors} errors', 'success' if errors == 0 else 'warning')
+    return redirect(url_for('admin_payments'))
+
+
+@app.route('/admin/payments/check/<order_id>')
+@admin_required  
+def admin_check_midtrans(order_id):
+    """Check payment status from Midtrans API (returns JSON)"""
+    result = fetch_midtrans_transaction(order_id)
+    return jsonify(result)
 
 
 @app.route('/admin/payment/<int:payment_id>/update', methods=['POST'])
@@ -583,6 +1330,211 @@ def admin_update_payment(payment_id):
     conn.close()
     flash('Payment updated.', 'success')
     return redirect(url_for('admin_payments'))
+
+
+@app.route('/admin/payments/<int:payment_id>/resend-invoice')
+@admin_required
+def admin_resend_invoice(payment_id):
+    """Resend invoice email for a payment"""
+    conn = get_db()
+    
+    # Get payment with user info
+    payment = conn.execute('''
+        SELECT p.*, u.name, u.email 
+        FROM payments p 
+        JOIN users u ON p.user_id = u.id 
+        WHERE p.id = ?
+    ''', (payment_id,)).fetchone()
+    
+    if not payment:
+        conn.close()
+        flash('Payment not found.', 'error')
+        return redirect(url_for('admin_payments'))
+    
+    if payment['status'] not in ['paid', 'completed']:
+        conn.close()
+        flash('Can only resend invoice for paid/completed payments.', 'error')
+        return redirect(url_for('admin_payments'))
+    
+    # Get plan info
+    plan = payment['plan'] or 'basic'
+    plan_info = SUBSCRIPTION_PLANS.get(plan, {})
+    
+    # Send invoice email
+    result = send_invoice_email(
+        to_email=payment['email'],
+        user_name=payment['name'],
+        order_id=payment['order_id'] or f"INV-{payment['id']}",
+        plan_name=plan_info.get('name', plan.title()),
+        amount_usd=payment['amount_usd'] or payment['amount'] or 0,
+        amount_idr=payment['amount_idr'] or 0,
+        payment_date=payment['paid_at'][:16] if payment['paid_at'] else payment['created_at'][:16] if payment['created_at'] else datetime.now().strftime('%Y-%m-%d %H:%M')
+    )
+    
+    conn.close()
+    
+    if result['success']:
+        flash(f'Invoice sent to {payment["email"]}', 'success')
+    else:
+        flash(f'Failed to send invoice: {result["message"]}', 'error')
+    
+    return redirect(url_for('admin_payments'))
+
+
+@app.route('/admin/settings')
+@admin_required
+def admin_settings():
+    """Admin settings page for Midtrans and other configurations"""
+    # Get all settings
+    conn = get_db()
+    settings_rows = conn.execute('SELECT * FROM app_settings').fetchall()
+    conn.close()
+    
+    # Convert to dictionary
+    settings = {row['setting_key']: row['setting_value'] for row in settings_rows}
+    
+    # Get current exchange rate
+    current_rate = get_exchange_rate()
+    
+    return render_template('admin/settings.html', settings=settings, current_rate=current_rate)
+
+
+@app.route('/admin/settings/update', methods=['POST'])
+@admin_required
+def admin_update_settings():
+    """Update admin settings"""
+    settings_type = request.form.get('settings_type', 'midtrans')
+    
+    if settings_type == 'email':
+        # Email settings
+        set_app_setting('email_enabled', 'true' if request.form.get('email_enabled') else 'false')
+        set_app_setting('smtp_host', request.form.get('smtp_host', 'smtp.zoho.com'))
+        set_app_setting('smtp_port', request.form.get('smtp_port', '587'))
+        set_app_setting('smtp_email', request.form.get('smtp_email', ''))
+        set_app_setting('smtp_password', request.form.get('smtp_password', ''))
+        set_app_setting('smtp_sender_name', request.form.get('smtp_sender_name', 'Forex Risk Manager'))
+        flash('Email settings updated successfully!', 'success')
+    elif settings_type == 'site':
+        # Site settings
+        site_url = request.form.get('site_url', '').strip().rstrip('/')
+        set_app_setting('site_url', site_url)
+        flash('Site settings updated successfully!', 'success')
+    else:
+        # Midtrans settings
+        set_app_setting('midtrans_server_key', request.form.get('midtrans_server_key', ''))
+        set_app_setting('midtrans_client_key', request.form.get('midtrans_client_key', ''))
+        set_app_setting('midtrans_is_production', 'true' if request.form.get('midtrans_is_production') else 'false')
+        
+        # Exchange rate settings
+        set_app_setting('use_live_exchange_rate', 'true' if request.form.get('use_live_exchange_rate') else 'false')
+        set_app_setting('usd_to_idr_rate', request.form.get('usd_to_idr_rate', '15500'))
+        flash('Midtrans settings updated successfully!', 'success')
+    
+    return redirect(url_for('admin_settings'))
+
+
+@app.route('/admin/settings/test-midtrans')
+@admin_required
+def admin_test_midtrans():
+    """Test Midtrans connection"""
+    config = get_midtrans_config()
+    
+    # Test API connection
+    try:
+        auth_string = base64.b64encode(f"{config['server_key']}:".encode()).decode()
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': f'Basic {auth_string}'
+        }
+        
+        # Try to get merchant info (simple API call)
+        test_url = config['api_url'].replace('/snap/v1', '/v2/point_of_sales')
+        response = requests.get(test_url, headers=headers, timeout=10)
+        
+        if response.status_code in [200, 401, 404]:
+            # 401 means auth worked but endpoint doesn't exist (OK for testing)
+            # 404 means server responded (connection works)
+            return jsonify({
+                'success': True, 
+                'message': 'Midtrans connection successful!',
+                'mode': 'Production' if config['is_production'] else 'Sandbox',
+                'server_key_preview': config['server_key'][:20] + '...' if len(config['server_key']) > 20 else config['server_key']
+            })
+        else:
+            return jsonify({
+                'success': False, 
+                'message': f'Midtrans responded with status {response.status_code}',
+                'details': response.text[:200]
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False, 
+            'message': f'Connection error: {str(e)}'
+        })
+
+
+@app.route('/admin/settings/test-email')
+@admin_required
+def admin_test_email():
+    """Send test email to admin"""
+    try:
+        config = get_email_config()
+        
+        if config.get('email_enabled', 'false') != 'true':
+            return jsonify({
+                'success': False,
+                'message': 'Email sending is disabled. Enable it first.'
+            })
+        
+        smtp_email = config.get('smtp_email', '')
+        if not smtp_email:
+            return jsonify({
+                'success': False,
+                'message': 'SMTP email not configured.'
+            })
+        
+        # Send test email to the admin
+        admin_email = session.get('user_email', smtp_email)
+        
+        html_content = """
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: #1f2937; color: white; padding: 30px; text-align: center;">
+                <h1 style="margin:0;">Forex Risk Manager</h1>
+            </div>
+            <div style="padding: 30px; background: #f9fafb;">
+                <h2 style="color: #10b981;">Email Configuration Test</h2>
+                <p>If you're reading this, your email settings are working correctly!</p>
+                <p>Your SMTP configuration has been successfully tested.</p>
+                <p style="margin-top: 20px;">
+                    <strong>Host:</strong> {}<br>
+                    <strong>Port:</strong> {}<br>
+                    <strong>From:</strong> {}
+                </p>
+            </div>
+            <div style="padding: 20px; text-align: center; color: #6b7280; font-size: 12px;">
+                <p>Forex Risk Manager - Professional Trading Risk Management</p>
+            </div>
+        </div>
+        """.format(config.get('smtp_host', 'N/A'), config.get('smtp_port', 'N/A'), smtp_email)
+        
+        result = send_email(admin_email, "Test Email - Forex Risk Manager", html_content)
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': f'Test email sent to {admin_email}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to send email',
+                'error': result.get('message', 'Unknown error')
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        })
 
 
 @app.route('/admin/create-admin', methods=['GET', 'POST'])
@@ -654,20 +1606,59 @@ def init_db():
     except:
         pass
     
-    # Payments table
+    # Add password reset columns
+    try:
+        conn.execute('ALTER TABLE users ADD COLUMN reset_token VARCHAR(100)')
+    except:
+        pass
+    try:
+        conn.execute('ALTER TABLE users ADD COLUMN reset_token_expires TIMESTAMP')
+    except:
+        pass
+    
+    # Payments table (Midtrans integration)
     conn.execute('''
         CREATE TABLE IF NOT EXISTS payments (
             id INTEGER PRIMARY KEY,
             user_id INTEGER,
-            amount REAL NOT NULL,
-            plan VARCHAR(20) NOT NULL,
+            order_id VARCHAR(100),
+            plan VARCHAR(20) DEFAULT 'basic',
+            amount REAL DEFAULT 0,
+            amount_usd REAL DEFAULT 0,
+            amount_idr INTEGER DEFAULT 0,
+            exchange_rate REAL DEFAULT 15500,
             status VARCHAR(20) DEFAULT 'pending',
+            payment_type VARCHAR(50),
             payment_method VARCHAR(50),
             transaction_id VARCHAR(100),
+            midtrans_transaction_id VARCHAR(100),
+            midtrans_status VARCHAR(50),
+            fraud_status VARCHAR(50),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            paid_at TIMESTAMP,
+            expires_at TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
+    
+    # Add new columns if they don't exist (for existing databases)
+    payment_columns = [
+        ('order_id', 'VARCHAR(100)'),
+        ('amount_usd', 'REAL DEFAULT 0'),
+        ('amount_idr', 'INTEGER DEFAULT 0'),
+        ('exchange_rate', 'REAL DEFAULT 15500'),
+        ('midtrans_transaction_id', 'VARCHAR(100)'),
+        ('midtrans_status', 'VARCHAR(50)'),
+        ('fraud_status', 'VARCHAR(50)'),
+        ('paid_at', 'TIMESTAMP'),
+        ('expires_at', 'TIMESTAMP'),
+        ('payment_type', 'VARCHAR(50)')
+    ]
+    for col_name, col_type in payment_columns:
+        try:
+            conn.execute(f'ALTER TABLE payments ADD COLUMN {col_name} {col_type}')
+        except:
+            pass
     
     conn.execute('''
         CREATE TABLE IF NOT EXISTS account (
@@ -732,6 +1723,30 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
+    
+    # App settings table (for Midtrans, etc.)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS app_settings (
+            id INTEGER PRIMARY KEY,
+            setting_key VARCHAR(100) UNIQUE NOT NULL,
+            setting_value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Insert default Midtrans settings if not exists
+    default_settings = [
+        ('midtrans_server_key', 'SB-Mid-server-YOUR_SERVER_KEY'),
+        ('midtrans_client_key', 'SB-Mid-client-YOUR_CLIENT_KEY'),
+        ('midtrans_is_production', 'false'),
+        ('usd_to_idr_rate', '15500'),
+        ('use_live_exchange_rate', 'true')
+    ]
+    for key, value in default_settings:
+        try:
+            conn.execute('INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)', (key, value))
+        except:
+            pass
     
     # Insert default account if not exists
     cursor = conn.execute('SELECT COUNT(*) FROM account')
@@ -840,14 +1855,18 @@ def calculate_position():
 @app.route('/add_trade', methods=['POST'])
 @login_required
 def add_trade():
-    pair = request.form.get('pair', 'EUR/USD')
-    trade_type = request.form.get('trade_type', 'buy')
-    lot_size = float(request.form.get('lot_size', 0.1))
-    entry_price = float(request.form.get('entry_price', 0))
-    stop_loss = float(request.form.get('stop_loss', 0)) if request.form.get('stop_loss') else None
-    take_profit = float(request.form.get('take_profit', 0)) if request.form.get('take_profit') else None
-    risk_percent = float(request.form.get('risk_percent', 0)) if request.form.get('risk_percent') else None
-    profit_loss = float(request.form.get('profit_loss', 0)) if request.form.get('profit_loss') else None
+    # Validate and sanitize inputs
+    pair = sanitize_string(request.form.get('pair', 'EUR/USD'), max_length=20)
+    trade_type = request.form.get('trade_type', 'buy').lower()
+    if trade_type not in VALID_TRADE_TYPES:
+        trade_type = 'buy'
+    
+    lot_size = validate_number(request.form.get('lot_size', 0.1), min_val=0.01, max_val=1000, default=0.1)
+    entry_price = validate_number(request.form.get('entry_price', 0), min_val=0, default=0)
+    stop_loss = validate_number(request.form.get('stop_loss'), min_val=0) if request.form.get('stop_loss') else None
+    take_profit = validate_number(request.form.get('take_profit'), min_val=0) if request.form.get('take_profit') else None
+    risk_percent = validate_number(request.form.get('risk_percent'), min_val=0, max_val=100) if request.form.get('risk_percent') else None
+    profit_loss = validate_number(request.form.get('profit_loss')) if request.form.get('profit_loss') else None
     
     conn = get_db()
     conn.execute('''
@@ -869,12 +1888,13 @@ def add_trade():
 @app.route('/update_trade/<int:trade_id>', methods=['POST'])
 @login_required
 def update_trade(trade_id):
-    entry_price = float(request.form.get('entry_price', 0))
-    lot_size = float(request.form.get('lot_size', 0.1))
-    stop_loss = float(request.form.get('stop_loss', 0)) if request.form.get('stop_loss') else None
-    take_profit = float(request.form.get('take_profit', 0)) if request.form.get('take_profit') else None
-    risk_percent = float(request.form.get('risk_percent', 0)) if request.form.get('risk_percent') else None
-    new_profit_loss = float(request.form.get('profit_loss', 0)) if request.form.get('profit_loss') else None
+    # Validate and sanitize inputs
+    entry_price = validate_number(request.form.get('entry_price', 0), min_val=0, default=0)
+    lot_size = validate_number(request.form.get('lot_size', 0.1), min_val=0.01, max_val=1000, default=0.1)
+    stop_loss = validate_number(request.form.get('stop_loss'), min_val=0) if request.form.get('stop_loss') else None
+    take_profit = validate_number(request.form.get('take_profit'), min_val=0) if request.form.get('take_profit') else None
+    risk_percent = validate_number(request.form.get('risk_percent'), min_val=0, max_val=100) if request.form.get('risk_percent') else None
+    new_profit_loss = validate_number(request.form.get('profit_loss')) if request.form.get('profit_loss') else None
     
     conn = get_db()
     
@@ -902,7 +1922,8 @@ def update_trade(trade_id):
 @app.route('/close_trade/<int:trade_id>', methods=['POST'])
 @login_required
 def close_trade(trade_id):
-    exit_price = float(request.form.get('exit_price', 0))
+    # Validate input
+    exit_price = validate_number(request.form.get('exit_price', 0), min_val=0, default=0)
     
     conn = get_db()
     trade = conn.execute('SELECT * FROM trades WHERE id = ?', (trade_id,)).fetchone()
@@ -1167,16 +2188,21 @@ def analyze_ict_route():
     3. Find OB/FVG on LTF for entry
     """
     data = request.get_json()
-    pair = data.get('pair', 'EUR/USD')
-    period = data.get('period', '1mo')
-    interval = data.get('interval', '15m')
-    balance = float(data.get('balance', 10000))
-    risk_percent = float(data.get('risk_percent', 1.0))
+    
+    # Validate and sanitize inputs
+    pair = validate_pair(data.get('pair', 'EUR/USD'))
+    if not pair:
+        return jsonify({'error': 'Invalid trading pair'}), 400
+    
+    period = validate_period(data.get('period', '1mo'))
+    interval = validate_interval(data.get('interval', '15m'))
+    balance = validate_number(data.get('balance', 10000), min_val=0, max_val=100000000, default=10000)
+    risk_percent = validate_number(data.get('risk_percent', 1.0), min_val=0.1, max_val=10, default=1.0)
     user_id = session.get('user_id')
     
     ticker_symbol = FOREX_TICKERS.get(pair)
     if not ticker_symbol:
-        return jsonify({'error': f'Unknown pair: {pair}'}), 400
+        return jsonify({'error': 'Invalid trading pair'}), 400
     
     try:
         # Get previous analysis from cache
@@ -1475,16 +2501,21 @@ def analyze_ml():
     import json as json_lib
     
     data = request.get_json()
-    pair = data.get('pair', 'EUR/USD')
-    period = data.get('period', '1mo')
-    interval = data.get('interval', '1h')
-    balance = float(data.get('balance', 10000))
-    risk_percent = float(data.get('risk_percent', 1.0))
+    
+    # Validate and sanitize inputs
+    pair = validate_pair(data.get('pair', 'EUR/USD'))
+    if not pair:
+        return jsonify({'error': 'Invalid trading pair'}), 400
+    
+    period = validate_period(data.get('period', '1mo'))
+    interval = validate_interval(data.get('interval', '1h'))
+    balance = validate_number(data.get('balance', 10000), min_val=0, max_val=100000000, default=10000)
+    risk_percent = validate_number(data.get('risk_percent', 1.0), min_val=0.1, max_val=10, default=1.0)
     user_id = session.get('user_id')
     
     ticker_symbol = FOREX_TICKERS.get(pair)
     if not ticker_symbol:
-        return jsonify({'error': f'Unknown pair: {pair}'}), 400
+        return jsonify({'error': 'Invalid trading pair'}), 400
     
     try:
         # Get previous analysis from cache
@@ -1588,14 +2619,19 @@ def analyze_arima():
     ARIMA Time Series Analysis and Prediction
     """
     data = request.get_json()
-    pair = data.get('pair', 'EUR/USD')
-    period = data.get('period', '3mo')
-    interval = data.get('interval', '1d')
-    forecast_periods = int(data.get('forecast_periods', 5))
+    
+    # Validate and sanitize inputs
+    pair = validate_pair(data.get('pair', 'EUR/USD'))
+    if not pair:
+        return jsonify({'error': 'Invalid trading pair'}), 400
+    
+    period = validate_period(data.get('period', '3mo'))
+    interval = validate_interval(data.get('interval', '1d'))
+    forecast_periods = validate_int(data.get('forecast_periods', 5), min_val=1, max_val=30, default=5)
     
     ticker_symbol = FOREX_TICKERS.get(pair)
     if not ticker_symbol:
-        return jsonify({'error': f'Unknown pair: {pair}'}), 400
+        return jsonify({'error': 'Invalid trading pair'}), 400
     
     try:
         ticker = yf.Ticker(ticker_symbol)
@@ -1993,17 +3029,27 @@ def analyze_strategies_route():
     """
     Analyze using Jim Simons inspired quantitative strategies
     """
+    VALID_STRATEGIES = {'ensemble', 'mean_reversion', 'momentum', 'breakout', 'volatility', 'all'}
+    
     data = request.get_json()
-    pair = data.get('pair', 'EUR/USD')
-    period = data.get('period', '1mo')
-    interval = data.get('interval', '1h')
-    balance = float(data.get('balance', 10000))
-    risk_percent = float(data.get('risk_percent', 1.0))
-    strategy = data.get('strategy', 'ensemble')  # Which strategy to use
+    
+    # Validate and sanitize inputs
+    pair = validate_pair(data.get('pair', 'EUR/USD'))
+    if not pair:
+        return jsonify({'error': 'Invalid trading pair'}), 400
+    
+    period = validate_period(data.get('period', '1mo'))
+    interval = validate_interval(data.get('interval', '1h'))
+    balance = validate_number(data.get('balance', 10000), min_val=0, max_val=100000000, default=10000)
+    risk_percent = validate_number(data.get('risk_percent', 1.0), min_val=0.1, max_val=10, default=1.0)
+    
+    strategy = data.get('strategy', 'ensemble')
+    if strategy not in VALID_STRATEGIES:
+        strategy = 'ensemble'
     
     ticker_symbol = FOREX_TICKERS.get(pair)
     if not ticker_symbol:
-        return jsonify({'error': f'Unknown pair: {pair}'}), 400
+        return jsonify({'error': 'Invalid trading pair'}), 400
     
     try:
         ticker = yf.Ticker(ticker_symbol)
@@ -2347,6 +3393,340 @@ def close_auto_position(position_id):
         return jsonify({'success': True, 'pnl': pnl, 'is_correct': is_correct})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ==================== PAYMENT ROUTES (MIDTRANS) ====================
+
+def get_exchange_rate():
+    """Get current USD to IDR exchange rate"""
+    use_live = get_app_setting('use_live_exchange_rate', 'true').lower() == 'true'
+    
+    if use_live:
+        try:
+            response = requests.get('https://api.exchangerate-api.com/v4/latest/USD', timeout=10)
+            if response.status_code == 200:
+                return response.json()['rates']['IDR']
+        except:
+            pass
+    
+    # Use manual rate from settings
+    manual_rate = get_app_setting('usd_to_idr_rate', str(DEFAULT_USD_TO_IDR))
+    try:
+        return float(manual_rate)
+    except:
+        return DEFAULT_USD_TO_IDR
+
+
+def create_midtrans_token(order_id, amount_idr, user_email, user_name, plan_name):
+    """Create Midtrans Snap token for payment"""
+    config = get_midtrans_config()
+    url = f"{config['api_url']}/transactions"
+    
+    auth_string = base64.b64encode(f"{config['server_key']}:".encode()).decode()
+    
+    headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': f'Basic {auth_string}'
+    }
+    
+    payload = {
+        'transaction_details': {
+            'order_id': order_id,
+            'gross_amount': int(amount_idr)
+        },
+        'credit_card': {
+            'secure': True
+        },
+        'customer_details': {
+            'email': user_email,
+            'first_name': user_name
+        },
+        'item_details': [{
+            'id': plan_name.lower(),
+            'price': int(amount_idr),
+            'quantity': 1,
+            'name': f'{plan_name} Subscription (30 days)'
+        }],
+        'callbacks': {
+            'finish': url_for('payment_finish', _external=True)
+        }
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        if response.status_code == 201:
+            return response.json()
+        else:
+            print(f"Midtrans error: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"Midtrans request error: {e}")
+        return None
+
+
+def verify_midtrans_signature(order_id, status_code, gross_amount, signature_key):
+    """Verify Midtrans webhook signature"""
+    import hashlib
+    config = get_midtrans_config()
+    raw = f"{order_id}{status_code}{gross_amount}{config['server_key']}"
+    calculated_signature = hashlib.sha512(raw.encode()).hexdigest()
+    return calculated_signature == signature_key
+
+
+@app.route('/pricing')
+@login_required
+def pricing():
+    """Show pricing page with subscription plans"""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],)).fetchone()
+    
+    # Get recent payments
+    payments = conn.execute('''
+        SELECT * FROM payments WHERE user_id = ? ORDER BY created_at DESC LIMIT 5
+    ''', (session['user_id'],)).fetchall()
+    conn.close()
+    
+    # Get exchange rate
+    exchange_rate = get_exchange_rate()
+    
+    # Calculate IDR prices
+    plans_with_idr = {}
+    for key, plan in SUBSCRIPTION_PLANS.items():
+        plans_with_idr[key] = {
+            **plan,
+            'price_idr': int(plan['price_usd'] * exchange_rate) if plan['price_usd'] > 0 else 0
+        }
+    
+    config = get_midtrans_config()
+    return render_template('pricing.html', 
+                          user=user, 
+                          plans=plans_with_idr,
+                          exchange_rate=exchange_rate,
+                          payments=payments,
+                          midtrans_client_key=config['client_key'],
+                          is_production=config['is_production'],
+                          snap_url=config['snap_url'])
+
+
+@app.route('/create-payment', methods=['POST'])
+@login_required
+def create_payment():
+    """Create a new payment transaction"""
+    try:
+        data = request.get_json()
+        plan = data.get('plan', 'basic')
+        
+        if plan not in SUBSCRIPTION_PLANS or plan == 'free':
+            return jsonify({'error': 'Invalid plan selected'}), 400
+        
+        conn = get_db()
+        user = conn.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],)).fetchone()
+        
+        # Get plan details
+        plan_info = SUBSCRIPTION_PLANS[plan]
+        price_usd = plan_info['price_usd']
+        
+        # Get exchange rate and calculate IDR amount
+        exchange_rate = get_exchange_rate()
+        amount_idr = int(price_usd * exchange_rate)
+        
+        # Generate unique order ID
+        order_id = f"FRM-{session['user_id']}-{plan.upper()}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+        # Create Midtrans token
+        midtrans_response = create_midtrans_token(
+            order_id=order_id,
+            amount_idr=amount_idr,
+            user_email=user['email'],
+            user_name=user['name'],
+            plan_name=plan_info['name']
+        )
+        
+        if not midtrans_response:
+            conn.close()
+            return jsonify({'error': 'Failed to create payment. Please try again.'}), 500
+        
+        # Save payment record
+        conn.execute('''
+            INSERT INTO payments (user_id, order_id, plan, amount, amount_usd, amount_idr, exchange_rate, status, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        ''', (session['user_id'], order_id, plan, price_usd, price_usd, amount_idr, exchange_rate,
+              datetime.now() + timedelta(hours=24)))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'token': midtrans_response.get('token'),
+            'redirect_url': midtrans_response.get('redirect_url'),
+            'order_id': order_id
+        })
+        
+    except Exception as e:
+        print(f"Create payment error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/payment-notification', methods=['POST'])
+def payment_notification():
+    """Handle Midtrans webhook notification"""
+    try:
+        data = request.get_json()
+        
+        order_id = data.get('order_id')
+        transaction_status = data.get('transaction_status')
+        fraud_status = data.get('fraud_status', 'accept')
+        transaction_id = data.get('transaction_id')
+        payment_type = data.get('payment_type')
+        status_code = data.get('status_code')
+        gross_amount = data.get('gross_amount')
+        signature_key = data.get('signature_key')
+        
+        # Verify signature
+        if signature_key and not verify_midtrans_signature(order_id, status_code, gross_amount, signature_key):
+            return jsonify({'error': 'Invalid signature'}), 403
+        
+        conn = get_db()
+        payment = conn.execute('SELECT * FROM payments WHERE order_id = ?', (order_id,)).fetchone()
+        
+        if not payment:
+            conn.close()
+            return jsonify({'error': 'Payment not found'}), 404
+        
+        # Determine payment status
+        if transaction_status == 'capture':
+            if fraud_status == 'accept':
+                status = 'paid'
+            else:
+                status = 'fraud'
+        elif transaction_status == 'settlement':
+            status = 'paid'
+        elif transaction_status in ['cancel', 'deny', 'expire']:
+            status = 'failed'
+        elif transaction_status == 'pending':
+            status = 'pending'
+        else:
+            status = transaction_status
+        
+        # Update payment record
+        conn.execute('''
+            UPDATE payments SET 
+                status = ?,
+                payment_type = ?,
+                midtrans_transaction_id = ?,
+                midtrans_status = ?,
+                fraud_status = ?,
+                paid_at = CASE WHEN ? = 'paid' THEN ? ELSE paid_at END
+            WHERE order_id = ?
+        ''', (status, payment_type, transaction_id, transaction_status, 
+              fraud_status, status, datetime.now(), order_id))
+        
+        # If payment successful, upgrade user subscription
+        if status == 'paid':
+            plan = payment['plan']
+            plan_info = SUBSCRIPTION_PLANS.get(plan, {})
+            days = plan_info.get('days', 30)
+            
+            # Calculate new expiry date
+            current_expires = conn.execute(
+                'SELECT subscription_expires FROM users WHERE id = ?', 
+                (payment['user_id'],)
+            ).fetchone()
+            
+            if current_expires and current_expires['subscription_expires']:
+                try:
+                    current_date = datetime.strptime(current_expires['subscription_expires'], '%Y-%m-%d %H:%M:%S.%f')
+                    if current_date > datetime.now():
+                        new_expires = current_date + timedelta(days=days)
+                    else:
+                        new_expires = datetime.now() + timedelta(days=days)
+                except:
+                    new_expires = datetime.now() + timedelta(days=days)
+            else:
+                new_expires = datetime.now() + timedelta(days=days)
+            
+            conn.execute('''
+                UPDATE users SET subscription_plan = ?, subscription_expires = ?
+                WHERE id = ?
+            ''', (plan, new_expires, payment['user_id']))
+            
+            # Send invoice email
+            user = conn.execute('SELECT name, email FROM users WHERE id = ?', (payment['user_id'],)).fetchone()
+            if user:
+                send_invoice_email(
+                    to_email=user['email'],
+                    user_name=user['name'],
+                    order_id=order_id,
+                    plan_name=plan_info.get('name', plan.title()),
+                    amount_usd=payment['amount_usd'] or payment['amount'] or 0,
+                    amount_idr=payment['amount_idr'] or 0,
+                    payment_date=datetime.now().strftime('%Y-%m-%d %H:%M')
+                )
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'status': 'ok'})
+        
+    except Exception as e:
+        print(f"Payment notification error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/payment-finish')
+@login_required
+def payment_finish():
+    """Handle payment completion redirect"""
+    order_id = request.args.get('order_id')
+    status = request.args.get('transaction_status', 'unknown')
+    
+    conn = get_db()
+    payment = None
+    if order_id:
+        payment = conn.execute('SELECT * FROM payments WHERE order_id = ?', (order_id,)).fetchone()
+    conn.close()
+    
+    return render_template('payment_finish.html', 
+                          order_id=order_id, 
+                          status=status,
+                          payment=payment)
+
+
+@app.route('/payment-history')
+@login_required
+def payment_history():
+    """Show user's payment history"""
+    conn = get_db()
+    payments = conn.execute('''
+        SELECT * FROM payments WHERE user_id = ? ORDER BY created_at DESC
+    ''', (session['user_id'],)).fetchall()
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],)).fetchone()
+    conn.close()
+    
+    return render_template('payment_history.html', payments=payments, user=user)
+
+
+@app.route('/check-payment-status/<order_id>')
+@login_required
+def check_payment_status(order_id):
+    """Check payment status"""
+    conn = get_db()
+    payment = conn.execute('''
+        SELECT * FROM payments WHERE order_id = ? AND user_id = ?
+    ''', (order_id, session['user_id'])).fetchone()
+    conn.close()
+    
+    if not payment:
+        return jsonify({'error': 'Payment not found'}), 404
+    
+    return jsonify({
+        'status': payment['status'],
+        'plan': payment['plan'],
+        'amount_usd': payment['amount_usd'],
+        'amount_idr': payment['amount_idr'],
+        'paid_at': payment['paid_at']
+    })
 
 
 if __name__ == '__main__':

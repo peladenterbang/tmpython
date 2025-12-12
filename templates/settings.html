@@ -65,7 +65,7 @@
             </div>
             
             <!-- Account Info -->
-            <div class="card">
+            <div class="card mb-4">
                 <div class="card-header">
                     <i class="bi bi-person"></i> Account Information
                 </div>
@@ -90,6 +90,74 @@
                             <td>{{ user.created_at[:10] if user.created_at else 'N/A' }}</td>
                         </tr>
                     </table>
+                </div>
+            </div>
+            
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
+                        <i class="bi bi-{{ 'exclamation-circle' if category == 'error' else 'check-circle' }}"></i> {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endwith %}
+            
+            <!-- Change Email -->
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <i class="bi bi-envelope"></i> Change Email
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('change_email') }}" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">Current Email</label>
+                            <input type="email" class="form-control" value="{{ user.email }}" disabled>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">New Email</label>
+                            <input type="email" name="new_email" class="form-control" 
+                                   placeholder="Enter new email address" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Confirm with Password</label>
+                            <input type="password" name="password" class="form-control" 
+                                   placeholder="Enter your current password" required>
+                            <small class="text-muted">Required to verify your identity</small>
+                        </div>
+                        <button type="submit" class="btn btn-info">
+                            <i class="bi bi-check-lg"></i> Update Email
+                        </button>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Change Password -->
+            <div class="card">
+                <div class="card-header bg-warning">
+                    <i class="bi bi-key"></i> Change Password
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('change_password') }}" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">Current Password</label>
+                            <input type="password" name="current_password" class="form-control" 
+                                   placeholder="Enter current password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">New Password</label>
+                            <input type="password" name="new_password" class="form-control" 
+                                   placeholder="Minimum 6 characters" minlength="6" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Confirm New Password</label>
+                            <input type="password" name="confirm_password" class="form-control" 
+                                   placeholder="Repeat new password" minlength="6" required>
+                        </div>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="bi bi-check-lg"></i> Change Password
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>

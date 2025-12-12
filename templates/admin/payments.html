@@ -3,56 +3,170 @@
 {% block title %}Manage Payments - Admin{% endblock %}
 
 {% block content %}
-<h2 class="mb-4"><i class="bi bi-credit-card"></i> Manage Payments</h2>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-credit-card"></i> Manage Payments</h2>
+    <div>
+        <a href="{{ url_for('admin_sync_all_payments') }}" class="btn btn-success" onclick="return confirm('Sync all pending payments from Midtrans?')">
+            <i class="bi bi-cloud-download"></i> Sync All Pending
+        </a>
+        <a href="https://{{ 'dashboard.midtrans.com' if midtrans_config.is_production else 'dashboard.sandbox.midtrans.com' }}/transactions" 
+           target="_blank" class="btn btn-outline-primary">
+            <i class="bi bi-box-arrow-up-right"></i> Open Midtrans
+        </a>
+    </div>
+</div>
+
+<!-- Midtrans Mode Badge -->
+<div class="alert alert-{{ 'danger' if midtrans_config.is_production else 'info' }} py-2 mb-3">
+    <i class="bi bi-{{ 'exclamation-triangle' if midtrans_config.is_production else 'info-circle' }}"></i>
+    Midtrans Mode: <strong>{{ 'PRODUCTION' if midtrans_config.is_production else 'SANDBOX' }}</strong>
+    {% if not midtrans_config.is_production %}
+    - Test transactions only
+    {% endif %}
+</div>
 
 <div class="card">
     <div class="card-body p-0">
-        <table class="table table-hover mb-0">
-            <thead class="table-dark">
-                <tr>
-                    <th>ID</th>
-                    <th>User</th>
-                    <th>Email</th>
-                    <th>Plan</th>
-                    <th>Amount</th>
-                    <th>Method</th>
-                    <th>Transaction ID</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% if payments %}
-                    {% for payment in payments %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
                     <tr>
-                        <td>{{ payment['id'] }}</td>
-                        <td>{{ payment['name'] }}</td>
-                        <td>{{ payment['email'] }}</td>
-                        <td>{{ payment['plan']|title }}</td>
-                        <td>${{ "%.2f"|format(payment['amount']) }}</td>
-                        <td>{{ payment['payment_method'] or '-' }}</td>
-                        <td><code>{{ payment['transaction_id'] or '-' }}</code></td>
-                        <td>
-                            <span class="badge bg-{{ 'success' if payment['status'] == 'completed' else 'warning' if payment['status'] == 'pending' else 'danger' }}">
-                                {{ payment['status']|title }}
-                            </span>
-                        </td>
-                        <td>{{ payment['created_at'][:16] if payment['created_at'] else '-' }}</td>
-                        <td>
-                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editPayment{{ payment['id'] }}">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                        </td>
+                        <th>Order ID</th>
+                        <th>User</th>
+                        <th>Plan</th>
+                        <th>Amount</th>
+                        <th>Payment Type</th>
+                        <th>Status</th>
+                        <th>Midtrans Status</th>
+                        <th>Date</th>
+                        <th>Actions</th>
                     </tr>
-                    {% endfor %}
-                {% else %}
-                    <tr><td colspan="10" class="text-center text-muted py-4">No payments yet</td></tr>
-                {% endif %}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    {% if payments %}
+                        {% for payment in payments %}
+                        <tr>
+                            <td>
+                                <code class="small">{{ payment['order_id'] or payment['transaction_id'] or '-' }}</code>
+                            </td>
+                            <td>
+                                <strong>{{ payment['name'] or 'Unknown' }}</strong><br>
+                                <small class="text-muted">{{ payment['email'] or '-' }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ 'dark' if payment['plan'] == 'pro' else 'primary' if payment['plan'] == 'basic' else 'secondary' }}">
+                                    {{ payment['plan']|upper if payment['plan'] else '-' }}
+                                </span>
+                            </td>
+                            <td>
+                                <strong>${{ "%.2f"|format(payment['amount_usd'] or payment['amount'] or 0) }}</strong><br>
+                                {% if payment['amount_idr'] %}
+                                <small class="text-muted">Rp {{ "{:,.0f}".format(payment['amount_idr']) }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if payment['payment_type'] %}
+                                <span class="badge bg-light text-dark border">{{ payment['payment_type'] }}</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if payment['status'] == 'paid' %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle"></i> Paid</span>
+                                {% elif payment['status'] == 'completed' %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle"></i> Completed</span>
+                                {% elif payment['status'] == 'pending' %}
+                                <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Pending</span>
+                                {% elif payment['status'] == 'failed' %}
+                                <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>
+                                {% elif payment['status'] == 'fraud' %}
+                                <span class="badge bg-danger"><i class="bi bi-exclamation-triangle"></i> Fraud</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ payment['status'] or '-' }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small>{{ payment['midtrans_status'] or '-' }}</small>
+                            </td>
+                            <td>
+                                <small>{{ payment['created_at'][:16] if payment['created_at'] else '-' }}</small>
+                                {% if payment['paid_at'] %}
+                                <br><small class="text-success">Paid: {{ payment['paid_at'][:16] }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    {% if payment['order_id'] %}
+                                    <a href="{{ url_for('admin_sync_payment', order_id=payment['order_id']) }}" 
+                                       class="btn btn-outline-success" title="Sync from Midtrans">
+                                        <i class="bi bi-cloud-download"></i>
+                                    </a>
+                                    <button class="btn btn-outline-info" onclick="checkMidtrans('{{ payment['order_id'] }}')" title="Check Status">
+                                        <i class="bi bi-search"></i>
+                                    </button>
+                                    {% endif %}
+                                    {% if payment['status'] in ['paid', 'completed'] %}
+                                    <a href="{{ url_for('admin_resend_invoice', payment_id=payment['id']) }}" 
+                                       class="btn btn-outline-warning" title="Resend Invoice"
+                                       onclick="return confirm('Send invoice email to {{ payment['email'] }}?')">
+                                        <i class="bi bi-envelope"></i>
+                                    </a>
+                                    {% endif %}
+                                    <button class="btn btn-outline-primary" data-bs-toggle="modal" 
+                                            data-bs-target="#editPayment{{ payment['id'] }}" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr><td colspan="9" class="text-center text-muted py-4">No payments yet</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
+
+<!-- Summary Stats -->
+{% if payments %}
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <h4>{{ payments|selectattr('status', 'in', ['paid', 'completed'])|list|length }}</h4>
+                <small>Paid</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning">
+            <div class="card-body text-center">
+                <h4>{{ payments|selectattr('status', 'equalto', 'pending')|list|length }}</h4>
+                <small>Pending</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white">
+            <div class="card-body text-center">
+                <h4>{{ payments|selectattr('status', 'in', ['failed', 'fraud'])|list|length }}</h4>
+                <small>Failed</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <h4>${{ "%.2f"|format(payments|selectattr('status', 'in', ['paid', 'completed'])|map(attribute='amount_usd')|select('number')|sum) }}</h4>
+                <small>Total Revenue</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Edit Payment Modals -->
 {% for payment in payments %}
@@ -60,52 +174,158 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">Update Payment #{{ payment['id'] }}</h5>
+                <h5 class="modal-title">Payment Details</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form action="{{ url_for('admin_update_payment', payment_id=payment['id']) }}" method="POST">
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">User</label>
-                        <input type="text" class="form-control" value="{{ payment['name'] }} ({{ payment['email'] }})" disabled>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label small text-muted">Order ID</label>
+                            <input type="text" class="form-control form-control-sm" value="{{ payment['order_id'] or '-' }}" disabled>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-muted">Midtrans ID</label>
+                            <input type="text" class="form-control form-control-sm" value="{{ payment['midtrans_transaction_id'] or '-' }}" disabled>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Plan</label>
-                        <input type="text" class="form-control" value="{{ payment['plan']|title }}" disabled>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label small text-muted">User</label>
+                            <input type="text" class="form-control form-control-sm" value="{{ payment['name'] or 'Unknown' }}" disabled>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-muted">Email</label>
+                            <input type="text" class="form-control form-control-sm" value="{{ payment['email'] or '-' }}" disabled>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Amount</label>
-                        <input type="text" class="form-control" value="${{ '%.2f'|format(payment['amount']) }}" disabled>
+                    <div class="row mb-3">
+                        <div class="col-4">
+                            <label class="form-label small text-muted">Plan</label>
+                            <input type="text" class="form-control form-control-sm" value="{{ payment['plan']|upper if payment['plan'] else '-' }}" disabled>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small text-muted">USD</label>
+                            <input type="text" class="form-control form-control-sm" value="${{ '%.2f'|format(payment['amount_usd'] or payment['amount'] or 0) }}" disabled>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small text-muted">IDR</label>
+                            <input type="text" class="form-control form-control-sm" value="Rp {{ '{:,.0f}'.format(payment['amount_idr'] or 0) }}" disabled>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Payment Method</label>
-                        <input type="text" class="form-control" value="{{ payment['payment_method'] or '-' }}" disabled>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label small text-muted">Payment Type</label>
+                            <input type="text" class="form-control form-control-sm" value="{{ payment['payment_type'] or '-' }}" disabled>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-muted">Midtrans Status</label>
+                            <input type="text" class="form-control form-control-sm" value="{{ payment['midtrans_status'] or '-' }}" disabled>
+                        </div>
                     </div>
+                    <hr>
                     <div class="mb-3">
-                        <label class="form-label">Transaction ID</label>
-                        <input type="text" class="form-control bg-warning-subtle fw-bold" value="{{ payment['transaction_id'] or '-' }}" disabled>
-                        <small class="text-muted">Verify this transaction ID with your payment provider</small>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Payment Status</label>
+                        <label class="form-label">Update Status</label>
                         <select name="status" class="form-select">
                             <option value="pending" {% if payment['status'] == 'pending' %}selected{% endif %}>Pending</option>
+                            <option value="paid" {% if payment['status'] == 'paid' %}selected{% endif %}>Paid</option>
                             <option value="completed" {% if payment['status'] == 'completed' %}selected{% endif %}>Completed</option>
                             <option value="failed" {% if payment['status'] == 'failed' %}selected{% endif %}>Failed</option>
                             <option value="refunded" {% if payment['status'] == 'refunded' %}selected{% endif %}>Refunded</option>
                         </select>
                     </div>
-                    <div class="alert alert-info small">
-                        <i class="bi bi-info-circle"></i> Setting status to "Completed" will activate the user's subscription.
+                    <div class="alert alert-info small mb-0">
+                        <i class="bi bi-info-circle"></i> Setting status to "Paid" or "Completed" will activate the user's subscription.
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <div class="me-auto">
+                        {% if payment['order_id'] %}
+                        <a href="{{ url_for('admin_sync_payment', order_id=payment['order_id']) }}" class="btn btn-success btn-sm">
+                            <i class="bi bi-cloud-download"></i> Sync
+                        </a>
+                        {% endif %}
+                        {% if payment['status'] in ['paid', 'completed'] %}
+                        <a href="{{ url_for('admin_resend_invoice', payment_id=payment['id']) }}" 
+                           class="btn btn-warning btn-sm"
+                           onclick="return confirm('Send invoice email to {{ payment['email'] }}?')">
+                            <i class="bi bi-envelope"></i> Resend Invoice
+                        </a>
+                        {% endif %}
+                    </div>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Update Status</button>
+                    <button type="submit" class="btn btn-primary">Update</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 {% endfor %}
+
+<!-- Midtrans Check Modal -->
+<div class="modal fade" id="midtransModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Midtrans Transaction Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="midtransModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary"></div>
+                    <p class="mt-2">Fetching from Midtrans...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function checkMidtrans(orderId) {
+    const modal = new bootstrap.Modal(document.getElementById('midtransModal'));
+    const body = document.getElementById('midtransModalBody');
+    
+    body.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-2">Fetching from Midtrans...</p>
+        </div>
+    `;
+    modal.show();
+    
+    try {
+        const response = await fetch('/admin/payments/check/' + orderId);
+        const data = await response.json();
+        
+        if (data.error) {
+            body.innerHTML = `
+                <div class="alert alert-danger">
+                    <strong>Error:</strong> ${data.error}
+                    ${data.message ? '<br><small>' + data.message + '</small>' : ''}
+                </div>
+            `;
+        } else {
+            body.innerHTML = `
+                <table class="table table-sm">
+                    <tr><td class="text-muted">Order ID</td><td><strong>${data.order_id || '-'}</strong></td></tr>
+                    <tr><td class="text-muted">Transaction ID</td><td><code>${data.transaction_id || '-'}</code></td></tr>
+                    <tr><td class="text-muted">Status</td><td><span class="badge bg-${data.transaction_status === 'settlement' || data.transaction_status === 'capture' ? 'success' : data.transaction_status === 'pending' ? 'warning' : 'danger'}">${data.transaction_status || '-'}</span></td></tr>
+                    <tr><td class="text-muted">Payment Type</td><td>${data.payment_type || '-'}</td></tr>
+                    <tr><td class="text-muted">Fraud Status</td><td>${data.fraud_status || '-'}</td></tr>
+                    <tr><td class="text-muted">Gross Amount</td><td>Rp ${parseInt(data.gross_amount || 0).toLocaleString()}</td></tr>
+                    <tr><td class="text-muted">Transaction Time</td><td>${data.transaction_time || '-'}</td></tr>
+                    <tr><td class="text-muted">Settlement Time</td><td>${data.settlement_time || '-'}</td></tr>
+                </table>
+                <a href="/admin/payments/sync/${orderId}" class="btn btn-success w-100">
+                    <i class="bi bi-cloud-download"></i> Sync This Payment
+                </a>
+            `;
+        }
+    } catch (error) {
+        body.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+    }
+}
+</script>
 {% endblock %}

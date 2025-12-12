@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Payment History - Forex Risk Manager{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-receipt"></i> Payment History</h2>
+        <a href="{{ url_for('pricing') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> New Subscription
+        </a>
+    </div>
+
+    <!-- Current Subscription -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <i class="bi bi-person-badge"></i> Current Subscription
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <small class="text-muted">Plan</small>
+                    <h4>
+                        {% if user.subscription_plan == 'pro' %}
+                        <span class="badge bg-dark">PRO</span>
+                        {% elif user.subscription_plan == 'basic' %}
+                        <span class="badge bg-primary">BASIC</span>
+                        {% else %}
+                        <span class="badge bg-secondary">FREE</span>
+                        {% endif %}
+                    </h4>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted">Status</small>
+                    <h4>
+                        {% if user.subscription_plan != 'free' and user.subscription_expires %}
+                            {% set exp_date = user.subscription_expires[:10] if user.subscription_expires else '' %}
+                            {% if exp_date >= now().strftime('%Y-%m-%d') %}
+                            <span class="text-success"><i class="bi bi-check-circle"></i> Active</span>
+                            {% else %}
+                            <span class="text-danger"><i class="bi bi-x-circle"></i> Expired</span>
+                            {% endif %}
+                        {% else %}
+                        <span class="text-secondary">-</span>
+                        {% endif %}
+                    </h4>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted">Expires</small>
+                    <h4>
+                        {% if user.subscription_plan != 'free' and user.subscription_expires %}
+                        {{ user.subscription_expires[:10] }}
+                        {% else %}
+                        Never
+                        {% endif %}
+                    </h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment History Table -->
+    <div class="card">
+        <div class="card-header">
+            <i class="bi bi-clock-history"></i> All Payments
+        </div>
+        <div class="card-body p-0">
+            {% if payments %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Date</th>
+                            <th>Plan</th>
+                            <th>Amount (USD)</th>
+                            <th>Amount (IDR)</th>
+                            <th>Rate</th>
+                            <th>Payment Type</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payment in payments %}
+                        <tr>
+                            <td>
+                                <code class="small">{{ payment.order_id if payment.order_id else '-' }}</code>
+                            </td>
+                            <td>{{ payment.created_at[:16] if payment.created_at else '-' }}</td>
+                            <td>
+                                {% if payment.plan == 'pro' %}
+                                <span class="badge bg-dark">PRO</span>
+                                {% elif payment.plan == 'basic' %}
+                                <span class="badge bg-primary">BASIC</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ payment.plan|upper }}</span>
+                                {% endif %}
+                            </td>
+                            <td>${{ "%.2f"|format(payment.amount_usd) if payment.amount_usd else '-' }}</td>
+                            <td>Rp {{ "{:,.0f}".format(payment.amount_idr) if payment.amount_idr else '-' }}</td>
+                            <td>
+                                {% if payment.exchange_rate %}
+                                {{ "{:,.0f}".format(payment.exchange_rate) }}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if payment.payment_type %}
+                                <span class="badge bg-light text-dark border">{{ payment.payment_type }}</span>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if payment.status == 'paid' %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle"></i> Paid
+                                </span>
+                                {% elif payment.status == 'pending' %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-hourglass-split"></i> Pending
+                                </span>
+                                {% elif payment.status == 'failed' %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-x-circle"></i> Failed
+                                </span>
+                                {% elif payment.status == 'fraud' %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-exclamation-triangle"></i> Fraud
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ payment.status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-receipt text-muted" style="font-size: 4rem;"></i>
+                <h5 class="mt-3 text-muted">No Payment History</h5>
+                <p class="text-muted">You haven't made any payments yet.</p>
+                <a href="{{ url_for('pricing') }}" class="btn btn-primary">
+                    <i class="bi bi-credit-card"></i> View Plans
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Stats -->
+    {% if payments %}
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h3 class="text-primary">{{ payments|length }}</h3>
+                    <small class="text-muted">Total Transactions</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h3 class="text-success">
+                        {{ payments|selectattr('status', 'equalto', 'paid')|list|length }}
+                    </h3>
+                    <small class="text-muted">Successful Payments</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h3 class="text-info">
+                        ${{ "%.2f"|format(payments|selectattr('status', 'equalto', 'paid')|map(attribute='amount_usd')|select('number')|sum) }}
+                    </h3>
+                    <small class="text-muted">Total Spent (USD)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

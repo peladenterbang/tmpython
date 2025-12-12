@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Payment Status - Forex Risk Manager{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-body text-center py-5">
+                    {% if status == 'success' or (payment and payment.status == 'paid') %}
+                    <!-- Success -->
+                    <div class="mb-4">
+                        <i class="bi bi-check-circle-fill text-success" style="font-size: 5rem;"></i>
+                    </div>
+                    <h2 class="text-success mb-3">Payment Successful!</h2>
+                    <p class="text-muted mb-4">
+                        Thank you for your subscription. Your account has been upgraded.
+                    </p>
+                    {% if payment %}
+                    <div class="bg-light p-3 rounded mb-4">
+                        <div class="row text-start">
+                            <div class="col-6">
+                                <small class="text-muted">Order ID</small>
+                                <p class="mb-2 fw-bold">{{ payment.order_id }}</p>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Plan</small>
+                                <p class="mb-2 fw-bold">{{ payment.plan|upper }}</p>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Amount (USD)</small>
+                                <p class="mb-2 fw-bold">${{ "%.2f"|format(payment.amount_usd) if payment.amount_usd else '-' }}</p>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Amount (IDR)</small>
+                                <p class="mb-0 fw-bold">Rp {{ "{:,.0f}".format(payment.amount_idr) if payment.amount_idr else '-' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    <a href="{{ url_for('index') }}" class="btn btn-success">
+                        <i class="bi bi-house"></i> Go to Dashboard
+                    </a>
+                    
+                    {% elif status == 'pending' or (payment and payment.status == 'pending') %}
+                    <!-- Pending -->
+                    <div class="mb-4">
+                        <i class="bi bi-hourglass-split text-warning" style="font-size: 5rem;"></i>
+                    </div>
+                    <h2 class="text-warning mb-3">Payment Pending</h2>
+                    <p class="text-muted mb-4">
+                        Your payment is being processed. This may take a few minutes.<br>
+                        You will receive a confirmation once the payment is complete.
+                    </p>
+                    {% if payment %}
+                    <div class="bg-light p-3 rounded mb-4">
+                        <div class="row text-start">
+                            <div class="col-6">
+                                <small class="text-muted">Order ID</small>
+                                <p class="mb-2 fw-bold">{{ payment.order_id }}</p>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Plan</small>
+                                <p class="mb-2 fw-bold">{{ payment.plan|upper }}</p>
+                            </div>
+                            <div class="col-12">
+                                <small class="text-muted">Amount</small>
+                                <p class="mb-0 fw-bold">
+                                    ${{ "%.2f"|format(payment.amount_usd) if payment.amount_usd else '-' }}
+                                    (Rp {{ "{:,.0f}".format(payment.amount_idr) if payment.amount_idr else '-' }})
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div class="d-flex gap-2 justify-content-center">
+                        <button class="btn btn-outline-primary" onclick="checkStatus()">
+                            <i class="bi bi-arrow-clockwise"></i> Check Status
+                        </button>
+                        <a href="{{ url_for('index') }}" class="btn btn-primary">
+                            <i class="bi bi-house"></i> Go to Dashboard
+                        </a>
+                    </div>
+                    
+                    {% else %}
+                    <!-- Error/Failed -->
+                    <div class="mb-4">
+                        <i class="bi bi-x-circle-fill text-danger" style="font-size: 5rem;"></i>
+                    </div>
+                    <h2 class="text-danger mb-3">Payment Failed</h2>
+                    <p class="text-muted mb-4">
+                        Unfortunately, your payment could not be processed.<br>
+                        Please try again or use a different payment method.
+                    </p>
+                    {% if order_id %}
+                    <p class="small text-muted mb-4">Order ID: {{ order_id }}</p>
+                    {% endif %}
+                    <div class="d-flex gap-2 justify-content-center">
+                        <a href="{{ url_for('pricing') }}" class="btn btn-primary">
+                            <i class="bi bi-arrow-left"></i> Try Again
+                        </a>
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-house"></i> Dashboard
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Help Section -->
+            <div class="text-center mt-4">
+                <p class="text-muted small">
+                    <i class="bi bi-question-circle"></i>
+                    Need help? Contact us at support@forexriskmanager.com
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function checkStatus() {
+    {% if order_id %}
+    try {
+        const response = await fetch('/check-payment-status/{{ order_id }}');
+        const data = await response.json();
+        
+        if (data.status === 'paid') {
+            window.location.reload();
+        } else if (data.status === 'failed') {
+            window.location.reload();
+        } else {
+            alert('Payment is still being processed. Please wait.');
+        }
+    } catch (error) {
+        alert('Error checking status: ' + error.message);
+    }
+    {% endif %}
+}
+
+// Auto-check status every 10 seconds if pending
+{% if status == 'pending' or (payment and payment.status == 'pending') %}
+setInterval(checkStatus, 10000);
+{% endif %}
+</script>
+{% endblock %}

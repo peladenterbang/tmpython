@@ -203,38 +203,130 @@
 
         <!-- Pairs Selection -->
         <div class="card mb-3">
-            <div class="card-header">
-                <i class="bi bi-star"></i> Trading Pairs
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-star"></i> Trading Pairs</span>
+                <small class="text-muted" id="pairCount">0 selected</small>
             </div>
-            <div class="card-body">
-                <small class="text-muted d-block mb-2">Select pairs for auto scanning:</small>
-                <div class="form-check mb-1">
-                    <input class="form-check-input pair-check" type="checkbox" value="EUR/USD" id="eurusd" {{ 'checked' if 'EUR/USD' in settings.pairs else '' }}>
-                    <label class="form-check-label small" for="eurusd">EUR/USD</label>
+            <div class="card-body p-2" style="max-height: 400px; overflow-y: auto;">
+                <div class="mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="selectAllPairs()">All</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="selectNonePairs()">None</button>
+                    <button type="button" class="btn btn-sm btn-outline-info" onclick="selectMajors()">Majors</button>
                 </div>
-                <div class="form-check mb-1">
-                    <input class="form-check-input pair-check" type="checkbox" value="GBP/USD" id="gbpusd" {{ 'checked' if 'GBP/USD' in settings.pairs else '' }}>
-                    <label class="form-check-label small" for="gbpusd">GBP/USD</label>
+                
+                <!-- Major Pairs -->
+                <div class="mb-2">
+                    <small class="text-primary fw-bold"><i class="bi bi-currency-exchange"></i> MAJORS</small>
+                    <div class="row g-0">
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check major" type="checkbox" value="EUR/USD" id="eurusd" {{ 'checked' if 'EUR/USD' in settings.pairs else '' }}><label class="form-check-label small" for="eurusd">EUR/USD</label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check major" type="checkbox" value="GBP/USD" id="gbpusd" {{ 'checked' if 'GBP/USD' in settings.pairs else '' }}><label class="form-check-label small" for="gbpusd">GBP/USD</label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check major" type="checkbox" value="USD/JPY" id="usdjpy" {{ 'checked' if 'USD/JPY' in settings.pairs else '' }}><label class="form-check-label small" for="usdjpy">USD/JPY</label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check major" type="checkbox" value="USD/CHF" id="usdchf" {{ 'checked' if 'USD/CHF' in settings.pairs else '' }}><label class="form-check-label small" for="usdchf">USD/CHF</label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check major" type="checkbox" value="AUD/USD" id="audusd" {{ 'checked' if 'AUD/USD' in settings.pairs else '' }}><label class="form-check-label small" for="audusd">AUD/USD</label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check major" type="checkbox" value="USD/CAD" id="usdcad" {{ 'checked' if 'USD/CAD' in settings.pairs else '' }}><label class="form-check-label small" for="usdcad">USD/CAD</label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check major" type="checkbox" value="NZD/USD" id="nzdusd" {{ 'checked' if 'NZD/USD' in settings.pairs else '' }}><label class="form-check-label small" for="nzdusd">NZD/USD</label></div></div>
+                    </div>
                 </div>
-                <div class="form-check mb-1">
-                    <input class="form-check-input pair-check" type="checkbox" value="USD/JPY" id="usdjpy" {{ 'checked' if 'USD/JPY' in settings.pairs else '' }}>
-                    <label class="form-check-label small" for="usdjpy">USD/JPY</label>
+
+                <!-- Cross Pairs -->
+                <div class="mb-2">
+                    <small class="text-secondary fw-bold cursor-pointer" data-bs-toggle="collapse" data-bs-target="#crossPairs"><i class="bi bi-chevron-down"></i> CROSSES</small>
+                    <div class="collapse" id="crossPairs">
+                        <div class="row g-0">
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="EUR/GBP" id="eurgbp" {{ 'checked' if 'EUR/GBP' in settings.pairs else '' }}><label class="form-check-label small" for="eurgbp">EUR/GBP</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="EUR/JPY" id="eurjpy" {{ 'checked' if 'EUR/JPY' in settings.pairs else '' }}><label class="form-check-label small" for="eurjpy">EUR/JPY</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="EUR/AUD" id="euraud" {{ 'checked' if 'EUR/AUD' in settings.pairs else '' }}><label class="form-check-label small" for="euraud">EUR/AUD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="EUR/CAD" id="eurcad" {{ 'checked' if 'EUR/CAD' in settings.pairs else '' }}><label class="form-check-label small" for="eurcad">EUR/CAD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="EUR/CHF" id="eurchf" {{ 'checked' if 'EUR/CHF' in settings.pairs else '' }}><label class="form-check-label small" for="eurchf">EUR/CHF</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="EUR/NZD" id="eurnzd" {{ 'checked' if 'EUR/NZD' in settings.pairs else '' }}><label class="form-check-label small" for="eurnzd">EUR/NZD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="GBP/JPY" id="gbpjpy" {{ 'checked' if 'GBP/JPY' in settings.pairs else '' }}><label class="form-check-label small" for="gbpjpy">GBP/JPY</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="GBP/AUD" id="gbpaud" {{ 'checked' if 'GBP/AUD' in settings.pairs else '' }}><label class="form-check-label small" for="gbpaud">GBP/AUD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="GBP/CAD" id="gbpcad" {{ 'checked' if 'GBP/CAD' in settings.pairs else '' }}><label class="form-check-label small" for="gbpcad">GBP/CAD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="GBP/CHF" id="gbpchf" {{ 'checked' if 'GBP/CHF' in settings.pairs else '' }}><label class="form-check-label small" for="gbpchf">GBP/CHF</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="GBP/NZD" id="gbpnzd" {{ 'checked' if 'GBP/NZD' in settings.pairs else '' }}><label class="form-check-label small" for="gbpnzd">GBP/NZD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="AUD/JPY" id="audjpy" {{ 'checked' if 'AUD/JPY' in settings.pairs else '' }}><label class="form-check-label small" for="audjpy">AUD/JPY</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="AUD/CAD" id="audcad" {{ 'checked' if 'AUD/CAD' in settings.pairs else '' }}><label class="form-check-label small" for="audcad">AUD/CAD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="AUD/CHF" id="audchf" {{ 'checked' if 'AUD/CHF' in settings.pairs else '' }}><label class="form-check-label small" for="audchf">AUD/CHF</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="AUD/NZD" id="audnzd" {{ 'checked' if 'AUD/NZD' in settings.pairs else '' }}><label class="form-check-label small" for="audnzd">AUD/NZD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="CAD/JPY" id="cadjpy" {{ 'checked' if 'CAD/JPY' in settings.pairs else '' }}><label class="form-check-label small" for="cadjpy">CAD/JPY</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="CAD/CHF" id="cadchf" {{ 'checked' if 'CAD/CHF' in settings.pairs else '' }}><label class="form-check-label small" for="cadchf">CAD/CHF</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="CHF/JPY" id="chfjpy" {{ 'checked' if 'CHF/JPY' in settings.pairs else '' }}><label class="form-check-label small" for="chfjpy">CHF/JPY</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="NZD/JPY" id="nzdjpy" {{ 'checked' if 'NZD/JPY' in settings.pairs else '' }}><label class="form-check-label small" for="nzdjpy">NZD/JPY</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="NZD/CAD" id="nzdcad" {{ 'checked' if 'NZD/CAD' in settings.pairs else '' }}><label class="form-check-label small" for="nzdcad">NZD/CAD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="NZD/CHF" id="nzdchf" {{ 'checked' if 'NZD/CHF' in settings.pairs else '' }}><label class="form-check-label small" for="nzdchf">NZD/CHF</label></div></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-check mb-1">
-                    <input class="form-check-input pair-check" type="checkbox" value="XAU/USD" id="xauusd" {{ 'checked' if 'XAU/USD' in settings.pairs else '' }}>
-                    <label class="form-check-label small" for="xauusd">XAU/USD (Gold)</label>
+
+                <!-- Exotic Pairs -->
+                <div class="mb-2">
+                    <small class="text-warning fw-bold cursor-pointer" data-bs-toggle="collapse" data-bs-target="#exoticPairs"><i class="bi bi-chevron-down"></i> EXOTICS</small>
+                    <div class="collapse" id="exoticPairs">
+                        <div class="row g-0">
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="USD/SGD" id="usdsgd" {{ 'checked' if 'USD/SGD' in settings.pairs else '' }}><label class="form-check-label small" for="usdsgd">USD/SGD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="USD/HKD" id="usdhkd" {{ 'checked' if 'USD/HKD' in settings.pairs else '' }}><label class="form-check-label small" for="usdhkd">USD/HKD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="USD/MXN" id="usdmxn" {{ 'checked' if 'USD/MXN' in settings.pairs else '' }}><label class="form-check-label small" for="usdmxn">USD/MXN</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="USD/ZAR" id="usdzar" {{ 'checked' if 'USD/ZAR' in settings.pairs else '' }}><label class="form-check-label small" for="usdzar">USD/ZAR</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="USD/TRY" id="usdtry" {{ 'checked' if 'USD/TRY' in settings.pairs else '' }}><label class="form-check-label small" for="usdtry">USD/TRY</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="USD/SEK" id="usdsek" {{ 'checked' if 'USD/SEK' in settings.pairs else '' }}><label class="form-check-label small" for="usdsek">USD/SEK</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="USD/NOK" id="usdnok" {{ 'checked' if 'USD/NOK' in settings.pairs else '' }}><label class="form-check-label small" for="usdnok">USD/NOK</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="USD/DKK" id="usddkk" {{ 'checked' if 'USD/DKK' in settings.pairs else '' }}><label class="form-check-label small" for="usddkk">USD/DKK</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="EUR/SEK" id="eursek" {{ 'checked' if 'EUR/SEK' in settings.pairs else '' }}><label class="form-check-label small" for="eursek">EUR/SEK</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="EUR/NOK" id="eurnok" {{ 'checked' if 'EUR/NOK' in settings.pairs else '' }}><label class="form-check-label small" for="eurnok">EUR/NOK</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="EUR/TRY" id="eurtry" {{ 'checked' if 'EUR/TRY' in settings.pairs else '' }}><label class="form-check-label small" for="eurtry">EUR/TRY</label></div></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-check mb-1">
-                    <input class="form-check-input pair-check" type="checkbox" value="BTC/USD" id="btcusd" {{ 'checked' if 'BTC/USD' in settings.pairs else '' }}>
-                    <label class="form-check-label small" for="btcusd">BTC/USD</label>
+
+                <!-- Commodities -->
+                <div class="mb-2">
+                    <small class="text-success fw-bold"><i class="bi bi-gem"></i> COMMODITIES</small>
+                    <div class="row g-0">
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="XAU/USD" id="xauusd" {{ 'checked' if 'XAU/USD' in settings.pairs else '' }}><label class="form-check-label small" for="xauusd">XAU/USD <small class="text-muted">Gold</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="XAG/USD" id="xagusd" {{ 'checked' if 'XAG/USD' in settings.pairs else '' }}><label class="form-check-label small" for="xagusd">XAG/USD <small class="text-muted">Silver</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="WTI/USD" id="wtiusd" {{ 'checked' if 'WTI/USD' in settings.pairs else '' }}><label class="form-check-label small" for="wtiusd">WTI/USD <small class="text-muted">Oil</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="BRENT" id="brent" {{ 'checked' if 'BRENT' in settings.pairs else '' }}><label class="form-check-label small" for="brent">BRENT <small class="text-muted">Oil</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="NGAS" id="ngas" {{ 'checked' if 'NGAS' in settings.pairs else '' }}><label class="form-check-label small" for="ngas">NGAS <small class="text-muted">NatGas</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="COPPER" id="copper" {{ 'checked' if 'COPPER' in settings.pairs else '' }}><label class="form-check-label small" for="copper">COPPER</label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="PLAT" id="plat" {{ 'checked' if 'PLAT' in settings.pairs else '' }}><label class="form-check-label small" for="plat">PLAT <small class="text-muted">Platinum</small></label></div></div>
+                    </div>
                 </div>
-                <div class="form-check mb-1">
-                    <input class="form-check-input pair-check" type="checkbox" value="ETH/USD" id="ethusd" {{ 'checked' if 'ETH/USD' in settings.pairs else '' }}>
-                    <label class="form-check-label small" for="ethusd">ETH/USD</label>
+
+                <!-- Crypto -->
+                <div class="mb-2">
+                    <small class="text-info fw-bold cursor-pointer" data-bs-toggle="collapse" data-bs-target="#cryptoPairs"><i class="bi bi-currency-bitcoin"></i> CRYPTO</small>
+                    <div class="collapse show" id="cryptoPairs">
+                        <div class="row g-0">
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="BTC/USD" id="btcusd" {{ 'checked' if 'BTC/USD' in settings.pairs else '' }}><label class="form-check-label small" for="btcusd">BTC/USD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="ETH/USD" id="ethusd" {{ 'checked' if 'ETH/USD' in settings.pairs else '' }}><label class="form-check-label small" for="ethusd">ETH/USD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="XRP/USD" id="xrpusd" {{ 'checked' if 'XRP/USD' in settings.pairs else '' }}><label class="form-check-label small" for="xrpusd">XRP/USD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="SOL/USD" id="solusd" {{ 'checked' if 'SOL/USD' in settings.pairs else '' }}><label class="form-check-label small" for="solusd">SOL/USD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="BNB/USD" id="bnbusd" {{ 'checked' if 'BNB/USD' in settings.pairs else '' }}><label class="form-check-label small" for="bnbusd">BNB/USD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="ADA/USD" id="adausd" {{ 'checked' if 'ADA/USD' in settings.pairs else '' }}><label class="form-check-label small" for="adausd">ADA/USD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="DOGE/USD" id="dogeusd" {{ 'checked' if 'DOGE/USD' in settings.pairs else '' }}><label class="form-check-label small" for="dogeusd">DOGE/USD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="DOT/USD" id="dotusd" {{ 'checked' if 'DOT/USD' in settings.pairs else '' }}><label class="form-check-label small" for="dotusd">DOT/USD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="MATIC/USD" id="maticusd" {{ 'checked' if 'MATIC/USD' in settings.pairs else '' }}><label class="form-check-label small" for="maticusd">MATIC/USD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="LTC/USD" id="ltcusd" {{ 'checked' if 'LTC/USD' in settings.pairs else '' }}><label class="form-check-label small" for="ltcusd">LTC/USD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="AVAX/USD" id="avaxusd" {{ 'checked' if 'AVAX/USD' in settings.pairs else '' }}><label class="form-check-label small" for="avaxusd">AVAX/USD</label></div></div>
+                            <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="LINK/USD" id="linkusd" {{ 'checked' if 'LINK/USD' in settings.pairs else '' }}><label class="form-check-label small" for="linkusd">LINK/USD</label></div></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-check">
-                    <input class="form-check-input pair-check" type="checkbox" value="US500" id="us500" {{ 'checked' if 'US500' in settings.pairs else '' }}>
-                    <label class="form-check-label small" for="us500">S&P 500</label>
+
+                <!-- Indices -->
+                <div class="mb-2">
+                    <small class="text-danger fw-bold"><i class="bi bi-graph-up"></i> INDICES</small>
+                    <div class="row g-0">
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="US500" id="us500" {{ 'checked' if 'US500' in settings.pairs else '' }}><label class="form-check-label small" for="us500">US500 <small class="text-muted">S&P</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="US100" id="us100" {{ 'checked' if 'US100' in settings.pairs else '' }}><label class="form-check-label small" for="us100">US100 <small class="text-muted">NAS</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="US30" id="us30" {{ 'checked' if 'US30' in settings.pairs else '' }}><label class="form-check-label small" for="us30">US30 <small class="text-muted">DOW</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="DE40" id="de40" {{ 'checked' if 'DE40' in settings.pairs else '' }}><label class="form-check-label small" for="de40">DE40 <small class="text-muted">DAX</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="UK100" id="uk100" {{ 'checked' if 'UK100' in settings.pairs else '' }}><label class="form-check-label small" for="uk100">UK100 <small class="text-muted">FTSE</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="JP225" id="jp225" {{ 'checked' if 'JP225' in settings.pairs else '' }}><label class="form-check-label small" for="jp225">JP225 <small class="text-muted">Nikkei</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="AU200" id="au200" {{ 'checked' if 'AU200' in settings.pairs else '' }}><label class="form-check-label small" for="au200">AU200 <small class="text-muted">ASX</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="EU50" id="eu50" {{ 'checked' if 'EU50' in settings.pairs else '' }}><label class="form-check-label small" for="eu50">EU50 <small class="text-muted">STOXX</small></label></div></div>
+                        <div class="col-6"><div class="form-check form-check-inline"><input class="form-check-input pair-check" type="checkbox" value="VIX" id="vix" {{ 'checked' if 'VIX' in settings.pairs else '' }}><label class="form-check-label small" for="vix">VIX <small class="text-muted">Fear</small></label></div></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -440,6 +532,36 @@
 
 {% block scripts %}
 <script>
+// Pair selection helpers
+function updatePairCount() {
+    const count = document.querySelectorAll('.pair-check:checked').length;
+    document.getElementById('pairCount').textContent = count + ' selected';
+}
+
+function selectAllPairs() {
+    document.querySelectorAll('.pair-check').forEach(cb => cb.checked = true);
+    updatePairCount();
+}
+
+function selectNonePairs() {
+    document.querySelectorAll('.pair-check').forEach(cb => cb.checked = false);
+    updatePairCount();
+}
+
+function selectMajors() {
+    document.querySelectorAll('.pair-check').forEach(cb => cb.checked = false);
+    document.querySelectorAll('.pair-check.major').forEach(cb => cb.checked = true);
+    updatePairCount();
+}
+
+// Update count on page load and checkbox change
+document.addEventListener('DOMContentLoaded', () => {
+    updatePairCount();
+    document.querySelectorAll('.pair-check').forEach(cb => {
+        cb.addEventListener('change', updatePairCount);
+    });
+});
+
 // Save Settings
 document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
     const selectedPairs = [];

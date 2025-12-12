@@ -7,12 +7,16 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+    <style>
+        .navbar { padding: 0.3rem 0; }
+        .navbar-nav .nav-link { padding: 0.5rem 0.6rem !important; font-size: 0.9rem; }
+    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
+        <div class="container-fluid px-3">
             <a class="navbar-brand" href="{{ url_for('index') }}">
-                <i class="bi bi-graph-up-arrow"></i> Forex Risk Manager
+                <i class="bi bi-graph-up-arrow"></i> FRM
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -32,27 +36,29 @@
                         <a class="nav-link" href="{{ url_for('ict') }}"><i class="bi bi-bullseye"></i> ICT</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('ml_predict') }}"><i class="bi bi-robot"></i> ML Predict</a>
+                        <a class="nav-link" href="{{ url_for('ml_predict') }}"><i class="bi bi-robot"></i> ML</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('arima_page') }}"><i class="bi bi-graph-up-arrow"></i> ARIMA Forecast</a>
+                        <a class="nav-link" href="{{ url_for('arima_page') }}"><i class="bi bi-graph-up-arrow"></i> ARIMA</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('strategies_page') }}"><i class="bi bi-lightbulb"></i> Quant Strategies</a>
+                        <a class="nav-link" href="{{ url_for('strategies_page') }}"><i class="bi bi-lightbulb"></i> Quant</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('auto_execution_page') }}"><i class="bi bi-lightning-charge"></i> Auto Execute</a>
+                        <a class="nav-link" href="{{ url_for('auto_execution_page') }}"><i class="bi bi-lightning-charge"></i> Auto</a>
                     </li>
-                    <li class="nav-item dropdown ms-2">
+                    <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-person-circle"></i> {{ session.get('user_name', 'User') }}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="{{ url_for('profile') }}"><i class="bi bi-person"></i> Profile</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('subscription') }}"><i class="bi bi-star"></i> Subscription</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('pricing') }}"><i class="bi bi-credit-card"></i> Pricing</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('payment_history') }}"><i class="bi bi-receipt"></i> Payments</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('settings') }}"><i class="bi bi-gear"></i> Settings</a></li>
                             {% if session.get('is_admin') %}
-                            <li><a class="dropdown-item text-danger" href="{{ url_for('admin_dashboard') }}"><i class="bi bi-shield-lock"></i> Admin Panel</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('admin_dashboard') }}"><i class="bi bi-shield-lock"></i> Admin</a></li>
                             {% endif %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>

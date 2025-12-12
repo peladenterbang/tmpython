@@ -14,14 +14,14 @@
     <!-- Settings Sidebar -->
     <div class="col-md-3">
         <div class="card mb-3">
-            <div class="card-header">
+            <div class="card-header bg-dark text-white">
                 <i class="bi bi-gear"></i> Settings
             </div>
             <div class="card-body">
                 <div class="mb-3">
-                    <label class="form-label">Currency Pair</label>
+                    <label class="form-label">Trading Pair</label>
                     <select id="pair" class="form-select">
-                        <optgroup label="Major Pairs">
+                        <optgroup label="Forex - Majors">
                             <option value="EUR/USD" selected>EUR/USD</option>
                             <option value="GBP/USD">GBP/USD</option>
                             <option value="USD/JPY">USD/JPY</option>
@@ -30,15 +30,42 @@
                             <option value="USD/CAD">USD/CAD</option>
                             <option value="NZD/USD">NZD/USD</option>
                         </optgroup>
-                        <optgroup label="Cross Pairs">
+                        <optgroup label="Forex - Crosses">
                             <option value="EUR/GBP">EUR/GBP</option>
                             <option value="EUR/JPY">EUR/JPY</option>
+                            <option value="EUR/CHF">EUR/CHF</option>
+                            <option value="EUR/AUD">EUR/AUD</option>
+                            <option value="EUR/CAD">EUR/CAD</option>
                             <option value="GBP/JPY">GBP/JPY</option>
+                            <option value="GBP/CHF">GBP/CHF</option>
+                            <option value="GBP/AUD">GBP/AUD</option>
                             <option value="AUD/JPY">AUD/JPY</option>
+                            <option value="AUD/NZD">AUD/NZD</option>
+                            <option value="AUD/CAD">AUD/CAD</option>
+                            <option value="CAD/JPY">CAD/JPY</option>
+                            <option value="CHF/JPY">CHF/JPY</option>
+                            <option value="NZD/JPY">NZD/JPY</option>
                         </optgroup>
-                        <optgroup label="Metals">
+                        <optgroup label="Commodities">
                             <option value="XAU/USD">XAU/USD (Gold)</option>
                             <option value="XAG/USD">XAG/USD (Silver)</option>
+                            <option value="BRENT">Brent Oil</option>
+                            <option value="WTI">WTI Oil</option>
+                        </optgroup>
+                        <optgroup label="Crypto">
+                            <option value="BTC/USD">BTC/USD (Bitcoin)</option>
+                            <option value="ETH/USD">ETH/USD (Ethereum)</option>
+                            <option value="SOL/USD">SOL/USD (Solana)</option>
+                            <option value="XRP/USD">XRP/USD (Ripple)</option>
+                            <option value="ADA/USD">ADA/USD (Cardano)</option>
+                        </optgroup>
+                        <optgroup label="Indices">
+                            <option value="US30">US30 (Dow Jones)</option>
+                            <option value="US100">US100 (Nasdaq)</option>
+                            <option value="US500">US500 (S&P 500)</option>
+                            <option value="GER40">GER40 (DAX)</option>
+                            <option value="UK100">UK100 (FTSE)</option>
+                            <option value="JPN225">JPN225 (Nikkei)</option>
                         </optgroup>
                     </select>
                 </div>
@@ -69,18 +96,18 @@
                         <option value="10">10 Periods</option>
                     </select>
                 </div>
-                <button id="analyzeBtn" class="btn btn-primary w-100">
+                <button id="analyzeBtn" class="btn btn-success w-100 mb-2">
                     <i class="bi bi-play-fill"></i> Run Analysis
                 </button>
-                <button id="pdfBtn" class="btn btn-outline-danger w-100 mt-2" onclick="generatePDFReport()">
-                    <i class="bi bi-file-earmark-pdf"></i> Generate Macro Report (PDF)
+                <button id="pdfBtn" class="btn btn-danger w-100" onclick="generatePDFReport()">
+                    <i class="bi bi-file-earmark-pdf"></i> Generate PDF Report
                 </button>
             </div>
         </div>
 
         <!-- Model Info -->
         <div class="card mb-3">
-            <div class="card-header">
+            <div class="card-header bg-info text-white">
                 <i class="bi bi-info-circle"></i> About ARIMA
             </div>
             <div class="card-body small">
@@ -142,7 +169,7 @@
 
         <!-- Signal Card -->
         <div class="card mb-3" id="signalCard" style="display: none;">
-            <div class="card-header">
+            <div class="card-header bg-warning">
                 <i class="bi bi-signpost"></i> Trading Signal
             </div>
             <div class="card-body text-center">
@@ -163,9 +190,9 @@
 
         <!-- Chart -->
         <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-graph-up"></i> Price Chart with Forecast</span>
-                <span id="currentPrice" class="badge bg-dark">--</span>
+                <span id="currentPrice" class="badge bg-light text-dark">--</span>
             </div>
             <div class="card-body p-0" style="height: 400px;">
                 <div id="chart" style="width: 100%; height: 100%;"></div>
@@ -174,7 +201,7 @@
 
         <!-- Forecast Table -->
         <div class="card mb-3" id="forecastCard" style="display: none;">
-            <div class="card-header">
+            <div class="card-header bg-primary text-white">
                 <i class="bi bi-table"></i> Forecast Results
             </div>
             <div class="card-body p-0">
@@ -198,7 +225,7 @@
             <!-- Model Diagnostics -->
             <div class="col-md-6">
                 <div class="card mb-3" id="diagnosticsCard" style="display: none;">
-                    <div class="card-header">
+                    <div class="card-header bg-secondary text-white">
                         <i class="bi bi-clipboard-data"></i> Model Diagnostics
                     </div>
                     <div class="card-body">
@@ -212,7 +239,7 @@
             <!-- Backtest Results -->
             <div class="col-md-6">
                 <div class="card mb-3" id="backtestCard" style="display: none;">
-                    <div class="card-header">
+                    <div class="card-header bg-success text-white">
                         <i class="bi bi-arrow-repeat"></i> Backtest Results
                     </div>
                     <div class="card-body">
@@ -241,7 +268,7 @@
 
         <!-- ACF/PACF -->
         <div class="card mb-3" id="acfCard" style="display: none;">
-            <div class="card-header">
+            <div class="card-header bg-dark text-white">
                 <i class="bi bi-bar-chart"></i> Autocorrelation Analysis
             </div>
             <div class="card-body">

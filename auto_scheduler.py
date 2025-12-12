@@ -142,18 +142,84 @@ def send_telegram_notification(user_id, message):
 
 
 FOREX_TICKERS = {
+    # Major Pairs
     'EUR/USD': 'EURUSD=X',
     'GBP/USD': 'GBPUSD=X',
     'USD/JPY': 'USDJPY=X',
     'USD/CHF': 'USDCHF=X',
     'AUD/USD': 'AUDUSD=X',
     'USD/CAD': 'USDCAD=X',
+    'NZD/USD': 'NZDUSD=X',
+    
+    # Cross Pairs
+    'EUR/GBP': 'EURGBP=X',
+    'EUR/JPY': 'EURJPY=X',
+    'EUR/AUD': 'EURAUD=X',
+    'EUR/CAD': 'EURCAD=X',
+    'EUR/CHF': 'EURCHF=X',
+    'EUR/NZD': 'EURNZD=X',
+    'GBP/JPY': 'GBPJPY=X',
+    'GBP/AUD': 'GBPAUD=X',
+    'GBP/CAD': 'GBPCAD=X',
+    'GBP/CHF': 'GBPCHF=X',
+    'GBP/NZD': 'GBPNZD=X',
+    'AUD/JPY': 'AUDJPY=X',
+    'AUD/CAD': 'AUDCAD=X',
+    'AUD/CHF': 'AUDCHF=X',
+    'AUD/NZD': 'AUDNZD=X',
+    'CAD/JPY': 'CADJPY=X',
+    'CAD/CHF': 'CADCHF=X',
+    'CHF/JPY': 'CHFJPY=X',
+    'NZD/JPY': 'NZDJPY=X',
+    'NZD/CAD': 'NZDCAD=X',
+    'NZD/CHF': 'NZDCHF=X',
+    
+    # Exotic Pairs
+    'USD/SGD': 'USDSGD=X',
+    'USD/HKD': 'USDHKD=X',
+    'USD/MXN': 'USDMXN=X',
+    'USD/ZAR': 'USDZAR=X',
+    'USD/TRY': 'USDTRY=X',
+    'USD/SEK': 'USDSEK=X',
+    'USD/NOK': 'USDNOK=X',
+    'USD/DKK': 'USDDKK=X',
+    'EUR/SEK': 'EURSEK=X',
+    'EUR/NOK': 'EURNOK=X',
+    'EUR/TRY': 'EURTRY=X',
+    
+    # Commodities
     'XAU/USD': 'GC=F',
     'XAG/USD': 'SI=F',
+    'WTI/USD': 'CL=F',
+    'BRENT': 'BZ=F',
+    'NGAS': 'NG=F',
+    'COPPER': 'HG=F',
+    'PLAT': 'PL=F',
+    
+    # Crypto
     'BTC/USD': 'BTC-USD',
     'ETH/USD': 'ETH-USD',
+    'XRP/USD': 'XRP-USD',
+    'SOL/USD': 'SOL-USD',
+    'BNB/USD': 'BNB-USD',
+    'ADA/USD': 'ADA-USD',
+    'DOGE/USD': 'DOGE-USD',
+    'DOT/USD': 'DOT-USD',
+    'MATIC/USD': 'MATIC-USD',
+    'LTC/USD': 'LTC-USD',
+    'AVAX/USD': 'AVAX-USD',
+    'LINK/USD': 'LINK-USD',
+    
+    # Indices
     'US500': 'ES=F',
     'US100': 'NQ=F',
+    'US30': 'YM=F',
+    'DE40': 'GDAXI',
+    'UK100': '^FTSE',
+    'JP225': '^N225',
+    'AU200': '^AXJO',
+    'EU50': '^STOXX50E',
+    'VIX': '^VIX',
 }
 
 
@@ -200,53 +266,104 @@ def calculate_atr(highs, lows, closes, period=14):
     return sum(tr_list[-period:]) / period
 
 
+def get_pair_info(pair):
+    """
+    Get pip size, pip value, and decimal places for different instruments
+    """
+    pair_upper = pair.upper()
+    
+    # JPY pairs
+    if 'JPY' in pair_upper:
+        return {'pip_size': 0.01, 'pip_value': 10, 'decimals': 3}
+    
+    # Precious Metals
+    elif 'XAU' in pair_upper or 'GOLD' in pair_upper:
+        return {'pip_size': 0.01, 'pip_value': 1, 'decimals': 2}
+    elif 'XAG' in pair_upper or 'SILVER' in pair_upper:
+        return {'pip_size': 0.001, 'pip_value': 5, 'decimals': 3}
+    elif 'PLAT' in pair_upper:
+        return {'pip_size': 0.1, 'pip_value': 1, 'decimals': 2}
+    elif 'COPPER' in pair_upper:
+        return {'pip_size': 0.0001, 'pip_value': 1, 'decimals': 4}
+    
+    # Energy
+    elif 'WTI' in pair_upper or 'BRENT' in pair_upper or pair_upper in ['CL', 'BZ']:
+        return {'pip_size': 0.01, 'pip_value': 10, 'decimals': 2}
+    elif 'NGAS' in pair_upper or pair_upper == 'NG':
+        return {'pip_size': 0.001, 'pip_value': 10, 'decimals': 3}
+    
+    # Crypto
+    elif 'BTC' in pair_upper:
+        return {'pip_size': 1.0, 'pip_value': 1, 'decimals': 2}
+    elif 'ETH' in pair_upper:
+        return {'pip_size': 0.01, 'pip_value': 1, 'decimals': 2}
+    elif pair_upper in ['XRP/USD', 'ADA/USD', 'DOGE/USD', 'DOT/USD', 'MATIC/USD']:
+        return {'pip_size': 0.0001, 'pip_value': 1, 'decimals': 4}
+    elif pair_upper in ['SOL/USD', 'BNB/USD', 'LTC/USD', 'AVAX/USD', 'LINK/USD']:
+        return {'pip_size': 0.01, 'pip_value': 1, 'decimals': 2}
+    
+    # Indices
+    elif any(idx in pair_upper for idx in ['US500', 'US100', 'US30', 'DE40', 'UK100', 'JP225', 'AU200', 'EU50']):
+        return {'pip_size': 0.1, 'pip_value': 1, 'decimals': 2}
+    elif 'VIX' in pair_upper:
+        return {'pip_size': 0.01, 'pip_value': 1, 'decimals': 2}
+    
+    # Exotic pairs with larger pip values
+    elif any(exotic in pair_upper for exotic in ['MXN', 'ZAR', 'TRY', 'SEK', 'NOK', 'DKK', 'HKD', 'SGD']):
+        return {'pip_size': 0.0001, 'pip_value': 10, 'decimals': 5}
+    
+    # Standard forex pairs
+    else:
+        return {'pip_size': 0.0001, 'pip_value': 10, 'decimals': 5}
+
+
+def format_price(price, pair):
+    """Format price with correct decimal places for the pair"""
+    if price is None:
+        return None
+    info = get_pair_info(pair)
+    return round(price, info['decimals'])
+
+
 def calculate_lot_size(balance, risk_percent, entry_price, stop_loss, pair):
     """
     Calculate proper lot size based on risk management
     
-    Formula: Lot Size = (Account Risk) / (Stop Loss in Pips * Pip Value)
+    Formula: Lot Size = Risk Amount / (SL Pips × Pip Value per Lot)
+    
+    Example for EUR/USD with $10,000 balance, 1% risk, 30 pip SL:
+    Lot Size = $100 / (30 × $10) = 0.33 lots
     """
     if not entry_price or not stop_loss or entry_price == stop_loss:
         return 0.01
     
-    # Calculate stop loss distance
+    info = get_pair_info(pair)
+    pip_size = info['pip_size']
+    pip_value = info['pip_value']
+    
+    # Calculate stop loss distance in pips
     sl_distance = abs(entry_price - stop_loss)
+    sl_pips = sl_distance / pip_size
     
-    # Risk amount in account currency
-    risk_amount = balance * (risk_percent / 100)
-    
-    # Determine pip value based on pair type
-    if 'JPY' in pair:
-        # JPY pairs: pip = 0.01
-        pip_size = 0.01
-        sl_pips = sl_distance / pip_size
-    elif 'XAU' in pair or 'GOLD' in pair:
-        # Gold: pip = 0.1
-        pip_size = 0.1
-        sl_pips = sl_distance / pip_size
-    elif 'BTC' in pair or 'ETH' in pair:
-        # Crypto: use percentage
-        sl_pips = (sl_distance / entry_price) * 10000
-        pip_size = entry_price / 10000
-    elif 'US500' in pair or 'US100' in pair:
-        # Indices: pip = 0.1
-        pip_size = 0.1
-        sl_pips = sl_distance / pip_size
+    # Sanity check: SL should be reasonable (1-500 pips for forex, more for crypto/gold)
+    if 'BTC' in pair.upper():
+        max_pips = 5000  # Bitcoin can have large moves
+    elif 'XAU' in pair.upper():
+        max_pips = 500   # Gold: 500 pips = $5 move
     else:
-        # Standard forex pairs: pip = 0.0001
-        pip_size = 0.0001
-        sl_pips = sl_distance / pip_size
+        max_pips = 500   # Forex: 500 pips max
+    
+    if sl_pips > max_pips:
+        sl_pips = max_pips  # Cap at reasonable value
     
     if sl_pips <= 0:
         return 0.01
     
-    # Pip value for 1 standard lot (100,000 units)
-    # For USD quote pairs: $10 per pip per lot
-    # For non-USD: varies, but we'll use $10 as approximation
-    pip_value_per_lot = 10
+    # Risk amount in account currency
+    risk_amount = balance * (risk_percent / 100)
     
     # Calculate lot size
-    lot_size = risk_amount / (sl_pips * pip_value_per_lot)
+    lot_size = risk_amount / (sl_pips * pip_value)
     
     # Round to 2 decimal places and enforce limits
     lot_size = round(lot_size, 2)
@@ -255,49 +372,57 @@ def calculate_lot_size(balance, risk_percent, entry_price, stop_loss, pair):
     return lot_size
 
 
-def calculate_sl_tp_levels(entry_price, direction, atr, highs, lows, risk_reward=2.0):
+def calculate_sl_tp_levels(entry_price, direction, atr, highs, lows, pair='EUR/USD', risk_reward=2.0):
     """
     Calculate Stop Loss and Take Profit based on ATR and recent swing points
+    Returns realistic pip-based levels
     """
-    if not atr:
-        # Fallback: use percentage-based SL/TP
-        if direction == 'BUY':
-            stop_loss = entry_price * 0.995
-            take_profit = entry_price * 1.015
-        else:
-            stop_loss = entry_price * 1.005
-            take_profit = entry_price * 0.985
-        return stop_loss, take_profit
+    info = get_pair_info(pair)
+    decimals = info['decimals']
+    pip_size = info['pip_size']
     
-    # Use 1.5x ATR for stop loss
+    if not atr:
+        # Fallback: use fixed pip-based SL/TP
+        # 30 pips SL, 60 pips TP (2:1 R:R)
+        sl_pips = 30
+        tp_pips = 60
+        
+        if direction == 'BUY':
+            stop_loss = entry_price - (sl_pips * pip_size)
+            take_profit = entry_price + (tp_pips * pip_size)
+        else:
+            stop_loss = entry_price + (sl_pips * pip_size)
+            take_profit = entry_price - (tp_pips * pip_size)
+        return round(stop_loss, decimals), round(take_profit, decimals)
+    
+    # Use 1.5x ATR for stop loss, but cap at reasonable levels
     sl_distance = atr * 1.5
+    
+    # Cap SL distance to reasonable pip ranges
+    max_sl_pips = 100 if 'XAU' not in pair.upper() and 'BTC' not in pair.upper() else 500
+    max_sl_distance = max_sl_pips * pip_size
+    
+    if sl_distance > max_sl_distance:
+        sl_distance = max_sl_distance
+    
+    # Minimum SL: 10 pips for forex, 50 for gold/crypto
+    min_sl_pips = 10 if 'XAU' not in pair.upper() and 'BTC' not in pair.upper() else 50
+    min_sl_distance = min_sl_pips * pip_size
+    
+    if sl_distance < min_sl_distance:
+        sl_distance = min_sl_distance
     
     # Use risk_reward ratio for take profit
     tp_distance = sl_distance * risk_reward
     
     if direction == 'BUY':
-        # For BUY: SL below entry, TP above entry
-        # Also consider recent swing low for SL
-        recent_low = min(lows[-20:]) if len(lows) >= 20 else min(lows)
-        
-        # Use the larger of ATR-based SL or swing low
-        atr_sl = entry_price - sl_distance
-        swing_sl = recent_low - (atr * 0.2)  # Small buffer below swing low
-        
-        stop_loss = min(atr_sl, swing_sl)  # Use the lower (safer) SL
+        stop_loss = entry_price - sl_distance
         take_profit = entry_price + tp_distance
-        
     else:  # SELL
-        # For SELL: SL above entry, TP below entry
-        recent_high = max(highs[-20:]) if len(highs) >= 20 else max(highs)
-        
-        atr_sl = entry_price + sl_distance
-        swing_sl = recent_high + (atr * 0.2)  # Small buffer above swing high
-        
-        stop_loss = max(atr_sl, swing_sl)  # Use the higher (safer) SL
+        stop_loss = entry_price + sl_distance
         take_profit = entry_price - tp_distance
     
-    return round(stop_loss, 5), round(take_profit, 5)
+    return round(stop_loss, decimals), round(take_profit, decimals)
 
 
 def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_method='ML'):
@@ -365,7 +490,7 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_metho
                     # Validate SL/TP or recalculate
                     if not setup_sl or not setup_tp:
                         setup_sl, setup_tp = calculate_sl_tp_levels(
-                            setup_entry, direction, atr, highs, lows, 2.0
+                            setup_entry, direction, atr, highs, lows, pair, 2.0
                         )
                     
                     # Calculate proper lot size
@@ -373,9 +498,9 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_metho
                     
                     signal = {
                         'direction': setup.get('type', direction),
-                        'entry': round(setup_entry, 5),
-                        'stop_loss': round(setup_sl, 5),
-                        'take_profit': round(setup_tp, 5),
+                        'entry': format_price(setup_entry, pair),
+                        'stop_loss': format_price(setup_sl, pair),
+                        'take_profit': format_price(setup_tp, pair),
                         'lots': lots,
                         'confidence': confidence
                     }
@@ -406,9 +531,9 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_metho
                     
                     signal = {
                         'direction': direction,
-                        'entry': round(entry_price, 5),
-                        'stop_loss': round(sl_level, 5),
-                        'take_profit': round(tp_target, 5),
+                        'entry': format_price(entry_price, pair),
+                        'stop_loss': format_price(sl_level, pair),
+                        'take_profit': format_price(tp_target, pair),
                         'lots': lots,
                         'confidence': confidence
                     }
@@ -509,13 +634,13 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_metho
             elif ict_direction != 'WAIT' and ict_confidence >= 70:
                 # ICT has strong signal - calculate proper levels
                 stop_loss, take_profit = calculate_sl_tp_levels(
-                    entry_price, ict_direction, atr, highs, lows, 2.0
+                    entry_price, ict_direction, atr, highs, lows, pair, 2.0
                 )
                 lots = calculate_lot_size(balance, risk_percent, entry_price, stop_loss, pair)
                 
                 signal = {
                     'direction': ict_direction,
-                    'entry': round(entry_price, 5),
+                    'entry': format_price(entry_price, pair),
                     'stop_loss': stop_loss,
                     'take_profit': take_profit,
                     'lots': lots,
@@ -542,7 +667,7 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_metho
         
         if not final_sl or not final_tp:
             final_sl, final_tp = calculate_sl_tp_levels(
-                final_entry, signal['direction'], atr, highs, lows, 2.0
+                final_entry, signal['direction'], atr, highs, lows, pair, 2.0
             )
         
         final_lots = signal.get('lots', 0.01)
@@ -559,18 +684,19 @@ def analyze_pair_for_signal(pair, balance=10000, risk_percent=1.0, trading_metho
         
         risk_reward = round(reward / risk, 2) if risk > 0 else 0
         
+        # Format all prices with correct decimals for this pair
         return {
             'pair': pair,
             'direction': signal['direction'],
-            'entry': round(final_entry, 5),
-            'stop_loss': round(final_sl, 5),
-            'take_profit': round(final_tp, 5),
+            'entry': format_price(final_entry, pair),
+            'stop_loss': format_price(final_sl, pair),
+            'take_profit': format_price(final_tp, pair),
             'lots': final_lots,
             'risk_reward': risk_reward,
             'probability': round(probability, 1),
             'confidence': signal.get('confidence', 50),
-            'current_price': round(closes[-1], 5),
-            'atr': round(atr, 5) if atr else None,
+            'current_price': format_price(closes[-1], pair),
+            'atr': format_price(atr, pair) if atr else None,
             'method': method_used
         }
     except Exception as e:
