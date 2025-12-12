@@ -299,7 +299,8 @@ def send_email(to_email, subject, html_content, text_content=None, attachment=No
 
 def send_password_reset_email(to_email, user_name, reset_url):
     """Send password reset email"""
-    subject = "Reset Your Password - Forex Risk Manager"
+    site_name = get_app_setting('site_name') or 'Forex Risk Manager'
+    subject = f"Reset Your Password - {site_name}"
     
     html_content = f"""
     <!DOCTYPE html>
@@ -317,7 +318,7 @@ def send_password_reset_email(to_email, user_name, reset_url):
     <body>
         <div class="container">
             <div class="header">
-                <h1 style="margin:0;">Forex Risk Manager</h1>
+                <h1 style="margin:0;">{site_name}</h1>
             </div>
             <div class="content">
                 <h2>Password Reset Request</h2>
@@ -333,7 +334,7 @@ def send_password_reset_email(to_email, user_name, reset_url):
                 </p>
             </div>
             <div class="footer">
-                <p>Forex Risk Manager - Professional Trading Risk Management</p>
+                <p>{site_name}</p>
             </div>
         </div>
     </body>
@@ -358,7 +359,8 @@ def send_password_reset_email(to_email, user_name, reset_url):
 
 def send_email_change_notification(to_email, user_name, new_email):
     """Send notification about email change"""
-    subject = "Email Address Changed - Forex Risk Manager"
+    site_name = get_app_setting('site_name') or 'Forex Risk Manager'
+    subject = f"Email Address Changed - {site_name}"
     
     html_content = f"""
     <!DOCTYPE html>
@@ -376,7 +378,7 @@ def send_email_change_notification(to_email, user_name, new_email):
     <body>
         <div class="container">
             <div class="header">
-                <h1 style="margin:0;">Forex Risk Manager</h1>
+                <h1 style="margin:0;">{site_name}</h1>
             </div>
             <div class="content">
                 <h2>Email Address Changed</h2>
@@ -388,7 +390,7 @@ def send_email_change_notification(to_email, user_name, new_email):
                 <p>You can now use your new email address to log in.</p>
             </div>
             <div class="footer">
-                <p>Forex Risk Manager - Professional Trading Risk Management</p>
+                <p>{site_name}</p>
             </div>
         </div>
     </body>
@@ -400,6 +402,7 @@ def send_email_change_notification(to_email, user_name, new_email):
 
 def send_invoice_email(to_email, user_name, order_id, plan_name, amount_usd, amount_idr, payment_date):
     """Send invoice email after successful payment"""
+    site_name = get_app_setting('site_name') or 'Forex Risk Manager'
     subject = f"Payment Confirmation - Order #{order_id}"
     
     html_content = f"""
@@ -422,7 +425,7 @@ def send_invoice_email(to_email, user_name, order_id, plan_name, amount_usd, amo
     <body>
         <div class="container">
             <div class="header">
-                <h1 style="margin:0;">Forex Risk Manager</h1>
+                <h1 style="margin:0;">{site_name}</h1>
             </div>
             <div class="content">
                 <div class="success">
@@ -464,7 +467,7 @@ def send_invoice_email(to_email, user_name, order_id, plan_name, amount_usd, amo
                 <p>Your {plan_name} subscription is now active. Enjoy all the premium features!</p>
             </div>
             <div class="footer">
-                <p>Forex Risk Manager - Professional Trading Risk Management</p>
+                <p>{site_name}</p>
                 <p>This is an automated email. Please do not reply.</p>
             </div>
         </div>
@@ -726,7 +729,8 @@ def register():
                 session['user_id'] = user['id']
                 session['user_email'] = user['email']
                 session['user_name'] = user['name']
-                flash('Registration successful! Welcome to Forex Risk Manager.', 'success')
+                site_name = get_app_setting('site_name') or 'Forex Risk Manager'
+                flash(f'Registration successful! Welcome to {site_name}.', 'success')
                 return redirect(url_for('index'))
     
     return render_template('register.html', error=error)
@@ -1547,11 +1551,12 @@ def admin_test_email():
         
         # Send test email to the admin
         admin_email = session.get('user_email', smtp_email)
+        site_name = get_app_setting('site_name') or 'Forex Risk Manager'
         
         html_content = """
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background: #1f2937; color: white; padding: 30px; text-align: center;">
-                <h1 style="margin:0;">Forex Risk Manager</h1>
+                <h1 style="margin:0;">{}</h1>
             </div>
             <div style="padding: 30px; background: #f9fafb;">
                 <h2 style="color: #10b981;">Email Configuration Test</h2>
@@ -1564,12 +1569,12 @@ def admin_test_email():
                 </p>
             </div>
             <div style="padding: 20px; text-align: center; color: #6b7280; font-size: 12px;">
-                <p>Forex Risk Manager - Professional Trading Risk Management</p>
+                <p>{}</p>
             </div>
         </div>
-        """.format(config.get('smtp_host', 'N/A'), config.get('smtp_port', 'N/A'), smtp_email)
+        """.format(site_name, config.get('smtp_host', 'N/A'), config.get('smtp_port', 'N/A'), smtp_email, site_name)
         
-        result = send_email(admin_email, "Test Email - Forex Risk Manager", html_content)
+        result = send_email(admin_email, f"Test Email - {site_name}", html_content)
         
         if result['success']:
             return jsonify({
@@ -1820,10 +1825,108 @@ def calculate_position_size(balance, risk_percent, stop_loss_pips, pip_value=10)
     position_size = risk_amount / (stop_loss_pips * pip_value)
     return round(position_size, 2)
 
+def get_market_summary():
+    """Get market summary for dashboard - forex, crypto, stocks/indices"""
+    summary = {
+        'forex': [],
+        'crypto': [],
+        'indices': []
+    }
+    
+    # Forex pairs to track
+    forex_pairs = [
+        ('EUR/USD', 'EURUSD=X'),
+        ('GBP/USD', 'GBPUSD=X'),
+        ('USD/JPY', 'USDJPY=X'),
+        ('AUD/USD', 'AUDUSD=X'),
+        ('USD/CHF', 'USDCHF=X'),
+        ('USD/CAD', 'USDCAD=X'),
+    ]
+    
+    # Crypto to track
+    crypto_pairs = [
+        ('BTC/USD', 'BTC-USD'),
+        ('ETH/USD', 'ETH-USD'),
+        ('XRP/USD', 'XRP-USD'),
+        ('SOL/USD', 'SOL-USD'),
+    ]
+    
+    # Indices/Stocks to track
+    indices = [
+        ('S&P 500', '^GSPC'),
+        ('NASDAQ', '^IXIC'),
+        ('DOW 30', '^DJI'),
+        ('Gold', 'GC=F'),
+        ('Oil', 'CL=F'),
+    ]
+    
+    try:
+        # Fetch forex data
+        for name, symbol in forex_pairs:
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period='2d')
+                if len(hist) >= 2:
+                    prev_close = hist['Close'].iloc[-2]
+                    current = hist['Close'].iloc[-1]
+                    change = ((current - prev_close) / prev_close) * 100
+                    summary['forex'].append({
+                        'name': name,
+                        'price': round(current, 5),
+                        'change': round(change, 2),
+                        'direction': 'up' if change > 0 else 'down' if change < 0 else 'neutral'
+                    })
+            except:
+                pass
+        
+        # Fetch crypto data
+        for name, symbol in crypto_pairs:
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period='2d')
+                if len(hist) >= 2:
+                    prev_close = hist['Close'].iloc[-2]
+                    current = hist['Close'].iloc[-1]
+                    change = ((current - prev_close) / prev_close) * 100
+                    summary['crypto'].append({
+                        'name': name,
+                        'price': round(current, 2),
+                        'change': round(change, 2),
+                        'direction': 'up' if change > 0 else 'down' if change < 0 else 'neutral'
+                    })
+            except:
+                pass
+        
+        # Fetch indices data
+        for name, symbol in indices:
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period='2d')
+                if len(hist) >= 2:
+                    prev_close = hist['Close'].iloc[-2]
+                    current = hist['Close'].iloc[-1]
+                    change = ((current - prev_close) / prev_close) * 100
+                    summary['indices'].append({
+                        'name': name,
+                        'price': round(current, 2),
+                        'change': round(change, 2),
+                        'direction': 'up' if change > 0 else 'down' if change < 0 else 'neutral'
+                    })
+            except:
+                pass
+    except Exception as e:
+        print(f"Error fetching market summary: {e}")
+    
+    return summary
+
+
 @app.route('/')
 @login_required
 def index():
     conn = get_db()
+    
+    # Get market summary
+    market_summary = get_market_summary()
     
     # Get or create account for user
     account = conn.execute('SELECT * FROM account WHERE user_id = ?', (session['user_id'],)).fetchone()
@@ -1861,7 +1964,8 @@ def index():
                          win_rate=round(win_rate, 2),
                          total_profit=round(total_profit, 2),
                          total_loss=round(total_loss, 2),
-                         current_drawdown=round(current_drawdown, 2))
+                         current_drawdown=round(current_drawdown, 2),
+                         market_summary=market_summary)
 
 @app.route('/update_balance', methods=['POST'])
 @login_required

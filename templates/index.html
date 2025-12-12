@@ -1,11 +1,87 @@
 {% extends 'base.html' %}
 
-{% block title %}Dashboard - Forex Risk Manager{% endblock %}
+{% block title %}Dashboard - {{ site_name }}{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
         <h2><i class="bi bi-speedometer2"></i> Risk Management Dashboard</h2>
+    </div>
+</div>
+
+<!-- Market Summary -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-graph-up"></i> Market Overview (24h Change)</span>
+                <small class="text-light opacity-75">Last updated: {{ now().strftime('%H:%M') }}</small>
+            </div>
+            <div class="card-body p-2">
+                <div class="row">
+                    <!-- Forex -->
+                    <div class="col-md-4">
+                        <h6 class="text-muted mb-2"><i class="bi bi-currency-exchange"></i> Forex</h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for item in market_summary.forex %}
+                            <div class="border rounded px-2 py-1 small" style="min-width: 100px;">
+                                <div class="fw-bold">{{ item.name }}</div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted">{{ item.price }}</span>
+                                    <span class="{% if item.direction == 'up' %}text-success{% elif item.direction == 'down' %}text-danger{% else %}text-secondary{% endif %}">
+                                        {% if item.direction == 'up' %}<i class="bi bi-caret-up-fill"></i>{% elif item.direction == 'down' %}<i class="bi bi-caret-down-fill"></i>{% endif %}
+                                        {{ item.change }}%
+                                    </span>
+                                </div>
+                            </div>
+                            {% else %}
+                            <span class="text-muted small">Loading...</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <!-- Crypto -->
+                    <div class="col-md-4">
+                        <h6 class="text-muted mb-2"><i class="bi bi-currency-bitcoin"></i> Crypto</h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for item in market_summary.crypto %}
+                            <div class="border rounded px-2 py-1 small" style="min-width: 100px;">
+                                <div class="fw-bold">{{ item.name }}</div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted">${{ "{:,.0f}".format(item.price) if item.price > 100 else "{:.2f}".format(item.price) }}</span>
+                                    <span class="{% if item.direction == 'up' %}text-success{% elif item.direction == 'down' %}text-danger{% else %}text-secondary{% endif %}">
+                                        {% if item.direction == 'up' %}<i class="bi bi-caret-up-fill"></i>{% elif item.direction == 'down' %}<i class="bi bi-caret-down-fill"></i>{% endif %}
+                                        {{ item.change }}%
+                                    </span>
+                                </div>
+                            </div>
+                            {% else %}
+                            <span class="text-muted small">Loading...</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <!-- Indices -->
+                    <div class="col-md-4">
+                        <h6 class="text-muted mb-2"><i class="bi bi-bar-chart-line"></i> Indices & Commodities</h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for item in market_summary.indices %}
+                            <div class="border rounded px-2 py-1 small" style="min-width: 100px;">
+                                <div class="fw-bold">{{ item.name }}</div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted">{{ "{:,.0f}".format(item.price) if item.price > 100 else "{:.2f}".format(item.price) }}</span>
+                                    <span class="{% if item.direction == 'up' %}text-success{% elif item.direction == 'down' %}text-danger{% else %}text-secondary{% endif %}">
+                                        {% if item.direction == 'up' %}<i class="bi bi-caret-up-fill"></i>{% elif item.direction == 'down' %}<i class="bi bi-caret-down-fill"></i>{% endif %}
+                                        {{ item.change }}%
+                                    </span>
+                                </div>
+                            </div>
+                            {% else %}
+                            <span class="text-muted small">Loading...</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
