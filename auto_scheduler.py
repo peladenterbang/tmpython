@@ -1040,11 +1040,24 @@ def start_scheduler():
     init_auto_tables()
     
     if scheduler is None:
-        scan_interval = 15  # Run the dispatcher every 15 minutes
+        # Get the minimum scan interval from enabled users to set the dispatcher frequency.
+        # The dispatcher will run at this fastest interval, but will only trigger scans for users whose time is due.
+        conn = get_db()
+        try:
+            min_interval_row = conn.execute('SELECT MIN(scan_interval) FROM auto_settings WHERE enabled = 1').fetchone()
+            min_interval = min_interval_row[0] if min_interval_row and min_interval_row[0] else None
+        except Exception as e:
+            print(f"Database query for min_interval failed: {e}")
+            min_interval = None
+        finally:
+            conn.close()
+
+        # Use a sensible default (e.g., 15 mins) if no users are enabled or if the query fails.
+        scan_interval = int(min_interval) if min_interval and int(min_interval) > 0 else 15
         
         scheduler = BackgroundScheduler()
         
-        # This job acts as a dispatcher, checking which users are due for a scan
+        # This job acts as a dispatcher, checking which users are due for a scan.
         scheduler.add_job(
             scheduled_scan, 
             'interval', 
@@ -1054,7 +1067,7 @@ def start_scheduler():
         )
         
         scheduler.start()
-        print(f"Scheduler dispatcher started, running every {scan_interval} minutes.")
+        print(f"Scheduler dispatcher started. Dispatcher runs every {scan_interval} minutes.")
     
     # Start position monitor thread
     if monitor_thread is None or not monitor_thread.is_alive():
