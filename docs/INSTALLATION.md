@@ -91,7 +91,9 @@ http://localhost:5000/admin/create-admin
 
 ## Production Deployment
 
-### Option 1: VPS (Ubuntu/Debian)
+### Option 1: VPS (Ubuntu/Debian) with systemd
+
+This is the recommended method for a standard Linux server. It uses `systemd` to manage the application and scheduler processes.
 
 #### Step 1: Server Setup
 
@@ -99,14 +101,14 @@ http://localhost:5000/admin/create-admin
 # Update system
 sudo apt update && sudo apt upgrade -y
 
-# Install Python and dependencies
-sudo apt install python3 python3-pip python3-venv nginx supervisor -y
+# Install Python, Nginx, and other required tools
+sudo apt install python3 python3-pip python3-venv nginx -y
 ```
 
-#### Step 2: Create App User
+#### Step 2: Create Application User
 
 ```bash
-# Create dedicated user
+# Create a dedicated non-root user for the application
 sudo useradd -m -s /bin/bash frm
 sudo passwd frm
 ```
@@ -114,68 +116,112 @@ sudo passwd frm
 #### Step 3: Clone and Setup Application
 
 ```bash
-# Create app directory
+# Create application directory
 sudo mkdir -p /var/www/frm
 cd /var/www/frm
 
-# Clone repository
+# Clone the repository into the directory
 sudo git clone <repository-url> .
 
-# Set ownership
+# Set correct ownership for the application directory
 sudo chown -R frm:frm /var/www/frm
 
-# Switch to app user
+# Switch to the new application user
 sudo su - frm
 cd /var/www/frm
 
-# Create virtual environment
+# Create and activate a Python virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
+# Install dependencies, including gunicorn for production
 pip install -r requirements.txt
 pip install gunicorn
 
-# Exit back to root
+# Exit back to your root/sudo user
 exit
 ```
 
-#### Step 4: Create Gunicorn Service
+#### Step 4: Create systemd Services
 
-Create `/etc/supervisor/conf.d/frm.conf`:
+You need two services: one for the web application (Gunicorn) and one for the scheduler.
 
-```ini
-[program:frm]
-directory=/var/www/frm
-command=/var/www/frm/.venv/bin/gunicorn -w 4 -b 127.0.0.1:8000 app:app
-user=frm
-autostart=true
-autorestart=true
-stopasgroup=true
-killasgroup=true
-stderr_logfile=/var/log/frm/error.log
-stdout_logfile=/var/log/frm/access.log
-environment=LANG=en_US.UTF-8,LC_ALL=en_US.UTF-8
+**1. Web Service (`frm-web.service`)**
+
+Create a service file for Gunicorn:
+```bash
+sudo nano /etc/systemd/system/frm-web.service
 ```
+
+Paste the following content:
+```ini
+[Unit]
+Description=Gunicorn instance for Forex Risk Manager Web App
+After=network.target
+
+[Service]
+User=frm
+Group=www-data
+WorkingDirectory=/var/www/frm
+Environment="PATH=/var/www/frm/.venv/bin"
+ExecStart=/var/www/frm/.venv/bin/gunicorn --workers 4 --bind 127.0.0.1:8000 app:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**2. Scheduler Service (`frm-scheduler.service`)**
+
+Create a service file for the auto-scheduler:
+```bash
+sudo nano /etc/systemd/system/frm-scheduler.service
+```
+
+Paste the following content:
+```ini
+[Unit]
+Description=Scheduler for Forex Risk Manager
+After=network.target
+
+[Service]
+User=frm
+WorkingDirectory=/var/www/frm
+Environment="PATH=/var/www/frm/.venv/bin"
+ExecStart=/var/www/frm/.venv/bin/python auto_scheduler.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**3. Start and Enable the Services**
 
 ```bash
-# Create log directory
-sudo mkdir -p /var/log/frm
-sudo chown frm:frm /var/log/frm
+# Reload systemd to recognize the new services
+sudo systemctl daemon-reload
 
-# Reload supervisor
-sudo supervisorctl reread
-sudo supervisorctl update
-sudo supervisorctl start frm
+# Start both services
+sudo systemctl start frm-web.service
+sudo systemctl start frm-scheduler.service
 
-# Check status
-sudo supervisorctl status frm
+# Enable them to start on boot
+sudo systemctl enable frm-web.service
+sudo systemctl enable frm-scheduler.service
+
+# Check their status to ensure they are running
+sudo systemctl status frm-web.service
+sudo systemctl status frm-scheduler.service
 ```
 
-#### Step 5: Configure Nginx
+#### Step 5: Configure Nginx as a Reverse Proxy
 
-Create `/etc/nginx/sites-available/frm`:
+Create an Nginx configuration file:
+```bash
+sudo nano /etc/nginx/sites-available/frm
+```
 
+Paste the following configuration, replacing `yourdomain.com` with your actual domain name.
 ```nginx
 server {
     listen 80;
@@ -207,7 +253,6 @@ server {
     location ~ /\. {
         deny all;
     }
-
     location ~ \.db$ {
         deny all;
     }
@@ -215,35 +260,30 @@ server {
 ```
 
 ```bash
-# Enable site
+# Enable the site by creating a symlink
 sudo ln -s /etc/nginx/sites-available/frm /etc/nginx/sites-enabled/
 
-# Remove default site (optional)
+# It's a good idea to remove the default Nginx site
 sudo rm /etc/nginx/sites-enabled/default
 
-# Test configuration
+# Test your Nginx configuration for syntax errors
 sudo nginx -t
 
-# Restart nginx
+# Restart Nginx to apply the changes
 sudo systemctl restart nginx
 ```
 
-#### Step 6: Set Permissions
+#### Step 6: Final Permissions & Firewall
 
 ```bash
-# Set correct permissions
-sudo chown -R frm:frm /var/www/frm
-sudo chmod -R 755 /var/www/frm
+# Add the web server user to the app group to allow access
+sudo usermod -a -G frm www-data
+
+# Set correct permissions for the database file
+sudo chown frm:frm /var/www/frm/database.db
 sudo chmod 664 /var/www/frm/database.db
 
-# Allow nginx to read static files
-sudo usermod -a -G frm www-data
-```
-
-#### Step 7: Configure Firewall
-
-```bash
-# Allow HTTP and HTTPS
+# Allow Nginx through the firewall
 sudo ufw allow 'Nginx Full'
 sudo ufw enable
 sudo ufw status
@@ -255,6 +295,8 @@ sudo ufw status
 
 #### Step 1: Create Dockerfile
 
+This `Dockerfile` will serve as the base for both the web and scheduler services.
+
 ```dockerfile
 FROM python:3.11-slim
 
@@ -264,38 +306,51 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
-# Copy application
+# Copy application code
 COPY . .
 
-# Create non-root user
+# Create a non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Set permissions for database
+# Set permissions for database (might fail if file doesn't exist yet, so `|| true` is used)
 RUN chmod 664 database.db || true
 
+# Expose port for Gunicorn
 EXPOSE 8000
 
+# Default command (can be overridden in docker-compose)
 CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "app:app"]
 ```
 
 #### Step 2: Create docker-compose.yml
 
+This file defines the web, scheduler, and Nginx services.
+
 ```yaml
 version: '3.8'
 
 services:
-  frm:
+  frm-web:
     build: .
-    container_name: frm_app
-    ports:
-      - "8000:8000"
+    container_name: frm_web
+    command: ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "app:app"]
     volumes:
       - ./database.db:/app/database.db
       - ./static:/app/static
     restart: unless-stopped
     environment:
       - FLASK_ENV=production
+
+  frm-scheduler:
+    build: .
+    container_name: frm_scheduler
+    command: ["python", "auto_scheduler.py"]
+    volumes:
+      - ./database.db:/app/database.db
+    restart: unless-stopped
+    depends_on:
+      - frm-web
 
   nginx:
     image: nginx:alpine
@@ -307,11 +362,13 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
       - ./ssl:/etc/nginx/ssl
     depends_on:
-      - frm
+      - frm-web
     restart: unless-stopped
 ```
 
 #### Step 3: Create nginx.conf for Docker
+
+Note the `proxy_pass` directive points to the `frm-web` service.
 
 ```nginx
 server {
@@ -319,12 +376,11 @@ server {
     server_name localhost;
 
     location / {
-        proxy_pass http://frm:8000;
+        proxy_pass http://frm-web:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
     }
 
     location /static {
@@ -334,58 +390,71 @@ server {
 }
 ```
 
-#### Step 4: Deploy
+#### Step 4: Deploy with Docker Compose
 
 ```bash
-# Build and start
+# Build and start all services in detached mode
 docker-compose up -d --build
 
-# View logs
+# View logs for all services
 docker-compose logs -f
 
-# Stop
+# View logs for a specific service (e.g., scheduler)
+docker-compose logs -f frm-scheduler
+
+# Stop and remove containers
 docker-compose down
 ```
 
 ---
 
-### Option 3: Platform as a Service
-
-#### Railway.app
-
-1. Create account at [railway.app](https://railway.app)
-2. Connect GitHub repository
-3. Add environment variables if needed
-4. Deploy automatically on push
-
-#### Render.com
-
-1. Create account at [render.com](https://render.com)
-2. Create new Web Service
-3. Connect repository
-4. Configure:
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `gunicorn app:app`
-5. Deploy
+### Option 3: Platform as a Service (PaaS)
 
 #### Heroku
 
-```bash
-# Login
-heroku login
+1.  **Create a `Procfile`** in your project root. This tells Heroku how to run your processes.
+    ```
+    web: gunicorn app:app
+    worker: python auto_scheduler.py
+    ```
 
-# Create Procfile
-echo "web: gunicorn app:app" > Procfile
+2.  **Deploy your application.**
+    ```bash
+    # Login to Heroku
+    heroku login
 
-# Create app
-heroku create your-app-name
+    # Create a new Heroku app
+    heroku create your-app-name
 
-# Deploy
-git push heroku main
+    # Push your code to deploy
+    git push heroku main
+    ```
 
-# Open app
-heroku open
-```
+3.  **Scale your processes.** By default, only the `web` process runs. You need to enable the `worker`.
+    ```bash
+    heroku ps:scale worker=1
+    ```
+
+#### Render.com
+
+1.  Create a new **Web Service** for the main application:
+    -   **Repository**: Connect your GitHub repository.
+    -   **Build Command**: `pip install -r requirements.txt gunicorn`
+    -   **Start Command**: `gunicorn app:app`
+
+2.  Create a new **Background Worker** for the scheduler:
+    -   **Repository**: Connect the same GitHub repository.
+    -   **Build Command**: `pip install -r requirements.txt`
+    -   **Start Command**: `python auto_scheduler.py`
+    -   Ensure the Background Worker has access to the same database if you are using a managed database service on Render.
+
+#### Railway.app
+
+Railway can often auto-detect a `Procfile` (see Heroku instructions). If you configure your services manually:
+
+1.  Create two services pointing to the same GitHub repository.
+2.  **Service 1 (Web)**: Set the start command to `gunicorn app:app`. Expose port 80/443.
+3.  **Service 2 (Scheduler)**: Set the start command to `python auto_scheduler.py`. Do not expose any port.
 
 ---
 
@@ -505,115 +574,122 @@ sudo certbot renew --dry-run
 ### 1. Application Won't Start
 
 ```bash
-# Check supervisor logs
-sudo tail -f /var/log/frm/error.log
+# Check the logs for the web and scheduler services
+sudo journalctl -u frm-web.service -f
+sudo journalctl -u frm-scheduler.service -f
 
-# Check supervisor status
-sudo supervisorctl status frm
+# Check the status of the services
+sudo systemctl status frm-web.service
+sudo systemctl status frm-scheduler.service
 
-# Restart application
-sudo supervisorctl restart frm
+# Restart the services
+sudo systemctl restart frm-web frm-scheduler
 ```
 
 ### 2. Database Locked Error
+
+This can happen if multiple processes are trying to write to the SQLite database simultaneously. The new `systemd` setup with a single scheduler should minimize this.
 
 ```bash
 # Fix permissions
 sudo chown frm:frm /var/www/frm/database.db
 sudo chmod 664 /var/www/frm/database.db
 
-# Restart app
-sudo supervisorctl restart frm
+# Restart the applications
+sudo systemctl restart frm-web frm-scheduler
 ```
 
-### 3. Static Files Not Loading
+### 3. Static Files Not Loading (404 errors)
 
 ```bash
-# Check nginx config
+# Ensure your Nginx configuration is correct
 sudo nginx -t
 
-# Check file permissions
+# Check that the file permissions allow the `www-data` user to read them
 ls -la /var/www/frm/static/
 
-# Restart nginx
+# Restart Nginx
 sudo systemctl restart nginx
 ```
 
 ### 4. 502 Bad Gateway
 
-```bash
-# Check if gunicorn is running
-sudo supervisorctl status frm
+This error means Nginx cannot communicate with the Gunicorn process.
 
-# Check if port 8000 is listening
+```bash
+# Check if the web service is running
+sudo systemctl status frm-web.service
+
+# Check that Gunicorn is listening on the correct port
 sudo netstat -tlnp | grep 8000
 
-# Restart both services
-sudo supervisorctl restart frm
+# Restart both the web service and Nginx
+sudo systemctl restart frm-web
 sudo systemctl restart nginx
 ```
 
 ### 5. Email Not Sending
 
-- Check Zoho App Password (not regular password)
-- Verify SMTP port (587 for TLS, 465 for SSL)
-- Enable 2FA in Zoho and generate App Password
-- Check spam folder
+- Check Zoho App Password (it should not be your regular login password).
+- Verify SMTP port (587 for TLS, 465 for SSL).
+- Ensure you have enabled 2FA in Zoho and generated an App Password.
+- Check your email's spam folder.
 
 ### 6. Password Reset Link Wrong Domain
 
-1. Go to Admin → Settings
-2. Set Site URL: `https://yourdomain.com`
-3. Or ensure Nginx passes these headers:
-   ```nginx
-   proxy_set_header Host $host;
-   proxy_set_header X-Forwarded-Proto $scheme;
-   proxy_set_header X-Forwarded-Host $host;
-   ```
+This happens when the application doesn't know its public URL.
+
+1. Go to **Admin → Settings**.
+2. Set the **Site URL** to `https://yourdomain.com`.
+3. Alternatively, ensure your Nginx config includes the `X-Forwarded-*` headers as shown in the setup guide.
 
 ### 7. Midtrans Webhook Not Working
 
-- Verify webhook URL is HTTPS
-- Check server logs for errors
-- Test with Midtrans sandbox first
-- Ensure firewall allows incoming connections
+- Verify your webhook URL in the Midtrans dashboard is correct and uses `https`.
+- Check the application logs (`journalctl -u frm-web.service -f`) for errors when a payment occurs.
+- Test with the Midtrans sandbox environment first.
+- Ensure your firewall (UFW) allows incoming HTTPS connections.
 
 ---
 
 ## Security Checklist
 
-- [ ] Change default secret key
-- [ ] Use HTTPS in production
-- [ ] Set secure cookie flags
-- [ ] Configure firewall (UFW)
-- [ ] Regular database backups
-- [ ] Keep dependencies updated
-- [ ] Use strong admin password
-- [ ] Set Site URL in admin settings
-- [ ] Enable Midtrans production mode only when ready
-- [ ] Restrict database file permissions
+- [ ] Change default `SECRET_KEY` in your environment.
+- [ ] Use HTTPS in production with a valid SSL certificate.
+- [ ] Configure firewall (UFW) to only allow necessary ports (e.g., 80, 443, 22).
+- [ ] Set up regular, automated database backups.
+- [ ] Keep system packages and Python dependencies updated.
+- [ ] Use a strong, unique password for the admin account.
+- [ ] Set the correct Site URL in the admin settings.
+- [ ] Restrict database file permissions (`chmod 664`).
 
 ---
 
 ## Useful Commands
 
 ```bash
-# View application logs
-sudo tail -f /var/log/frm/error.log
-sudo tail -f /var/log/frm/access.log
+# View live logs for the web app
+sudo journalctl -u frm-web.service -f
 
-# Restart services
-sudo supervisorctl restart frm
+# View live logs for the scheduler
+sudo journalctl -u frm-scheduler.service -f
+
+# Restart both services
+sudo systemctl restart frm-web frm-scheduler
+
+# Restart just Nginx
 sudo systemctl restart nginx
 
-# Check status
-sudo supervisorctl status
+# Check status of services
+sudo systemctl status frm-web
+sudo systemctl status frm-scheduler
 sudo systemctl status nginx
 
-# Update application
+# Update the application from git
 cd /var/www/frm
 sudo -u frm git pull
-sudo supervisorctl restart frm
+pip install -r requirements.txt # As the 'frm' user in the venv
+sudo systemctl restart frm-web frm-scheduler
 ```
 
 ---

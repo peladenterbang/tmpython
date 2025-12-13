@@ -62,6 +62,12 @@ def init_auto_tables():
     except:
         pass  # Column already exists
     
+    # Add last_scanned_at column for per-user scheduling
+    try:
+        conn.execute('ALTER TABLE auto_settings ADD COLUMN last_scanned_at TIMESTAMP')
+    except:
+        pass # Column already exists
+    
     # Auto executed trades with monitoring
     conn.execute('''
         CREATE TABLE IF NOT EXISTS auto_executions (
@@ -976,20 +982,55 @@ def monitor_positions():
 
 
 def scheduled_scan():
-    """Scheduled job to scan markets for all enabled users"""
+    """
+    Scheduled job dispatcher.
+    Runs at a fixed interval and triggers scans for users
+    whose individual scan interval has elapsed.
+    """
     conn = get_db()
-    
+
     enabled_users = conn.execute('''
-        SELECT user_id FROM auto_settings WHERE enabled = 1
+        SELECT user_id, scan_interval, last_scanned_at
+        FROM auto_settings WHERE enabled = 1
     ''').fetchall()
-    
+
     conn.close()
-    
+
+    now = datetime.now()
+
     for user in enabled_users:
-        try:
-            scan_markets_for_user(user['user_id'])
-        except Exception as e:
-            print(f"Scan error for user {user['user_id']}: {e}")
+        user = dict(user)
+        is_due = False
+        if user['last_scanned_at'] is None:
+            is_due = True
+        else:
+            try:
+                last_scanned = datetime.fromisoformat(user['last_scanned_at'])
+            except (ValueError, TypeError):
+                try:
+                    last_scanned = datetime.strptime(user['last_scanned_at'], '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    print(f"Could not parse last_scanned_at timestamp '{user['last_scanned_at']}' for user {user['user_id']}. Assuming scan is due.")
+                    is_due = True
+            
+            if not is_due and now >= last_scanned + timedelta(minutes=user['scan_interval']):
+                is_due = True
+
+        if is_due:
+            # Update timestamp before starting scan to prevent race conditions
+            conn_update = get_db()
+            conn_update.execute('UPDATE auto_settings SET last_scanned_at = ? WHERE user_id = ?', (now, user['user_id']))
+            conn_update.commit()
+            conn_update.close()
+
+            # Run scan in a thread to avoid blocking
+            try:
+                print(f"Starting scan for user {user['user_id']} (Interval: {user['scan_interval']} mins)")
+                scan_thread = threading.Thread(target=scan_markets_for_user, args=(user['user_id'],))
+                scan_thread.daemon = True
+                scan_thread.start()
+            except Exception as e:
+                print(f"Error starting scan thread for user {user['user_id']}: {e}")
 
 
 def start_scheduler():
@@ -999,27 +1040,21 @@ def start_scheduler():
     init_auto_tables()
     
     if scheduler is None:
-        # Get the minimum scan interval from enabled users
-        conn = get_db()
-        min_interval = conn.execute('SELECT MIN(scan_interval) FROM auto_settings WHERE enabled = 1').fetchone()[0]
-        conn.close()
-        
-        # Default to 30 minutes if no enabled users or no interval set
-        scan_interval = min_interval if min_interval else 30
+        scan_interval = 15  # Run the dispatcher every 15 minutes
         
         scheduler = BackgroundScheduler()
         
-        # Add job to scan markets at the configured interval
+        # This job acts as a dispatcher, checking which users are due for a scan
         scheduler.add_job(
             scheduled_scan, 
             'interval', 
             minutes=scan_interval, 
-            id='market_scan',
+            id='market_scan_dispatcher',
             replace_existing=True
         )
         
         scheduler.start()
-        print(f"Scheduler started - scanning every {scan_interval} minutes")
+        print(f"Scheduler dispatcher started, running every {scan_interval} minutes.")
     
     # Start position monitor thread
     if monitor_thread is None or not monitor_thread.is_alive():
