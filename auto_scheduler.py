@@ -714,8 +714,11 @@ def scan_markets_for_user(user_id):
     settings = conn.execute('''
         SELECT * FROM auto_settings WHERE user_id = ?
     ''', (user_id,)).fetchone()
-    
-    if not settings or not settings['enabled']:
+    # Convert sqlite3.Row to dict so callers can use .get()
+    if settings:
+        settings = dict(settings)
+
+    if not settings or not settings.get('enabled'):
         conn.close()
         return
     
