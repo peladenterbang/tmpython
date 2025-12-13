@@ -148,7 +148,9 @@ def get_app_setting(key, default=None):
     """Get app setting from database"""
     try:
         conn = sqlite3.connect(DATABASE)
-        conn.row_factory = sqlite3.Row
+        def _dict_factory(cursor, row):
+            return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+        conn.row_factory = _dict_factory
         result = conn.execute('SELECT setting_value FROM app_settings WHERE setting_key = ?', (key,)).fetchone()
         conn.close()
         return result['setting_value'] if result else default
@@ -1631,7 +1633,9 @@ def create_first_admin():
 
 def get_db():
     conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
+    def _dict_factory(cursor, row):
+        return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+    conn.row_factory = _dict_factory
     return conn
 
 def init_db():

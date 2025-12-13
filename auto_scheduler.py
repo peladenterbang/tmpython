@@ -28,8 +28,11 @@ stop_monitor = False
 
 
 def get_db():
+    def _dict_factory(cursor, row):
+        return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+    
     conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
+    conn.row_factory = _dict_factory
     return conn
 
 
