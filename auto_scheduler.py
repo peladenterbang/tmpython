@@ -28,11 +28,8 @@ stop_monitor = False
 
 
 def get_db():
-    def _dict_factory(cursor, row):
-        return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
-    
     conn = sqlite3.connect(DATABASE)
-    conn.row_factory = _dict_factory
+    conn.row_factory = sqlite3.Row
     return conn
 
 
@@ -717,7 +714,8 @@ def scan_markets_for_user(user_id):
     settings = conn.execute('''
         SELECT * FROM auto_settings WHERE user_id = ?
     ''', (user_id,)).fetchone()
-    # Convert sqlite3.Row to dict so callers can use .get()
+    
+    # Convert to dict for .get() method support
     if settings:
         settings = dict(settings)
 
@@ -1001,19 +999,27 @@ def start_scheduler(app):
     init_auto_tables()
     
     if scheduler is None:
+        # Get the minimum scan interval from enabled users
+        conn = get_db()
+        min_interval = conn.execute('SELECT MIN(scan_interval) FROM auto_settings WHERE enabled = 1').fetchone()[0]
+        conn.close()
+        
+        # Default to 30 minutes if no enabled users or no interval set
+        scan_interval = min_interval if min_interval else 30
+        
         scheduler = BackgroundScheduler()
         
-        # Add job to scan markets every 30 minutes
+        # Add job to scan markets at the configured interval
         scheduler.add_job(
             scheduled_scan, 
             'interval', 
-            minutes=30, 
+            minutes=scan_interval, 
             id='market_scan',
             replace_existing=True
         )
         
         scheduler.start()
-        print("Scheduler started - scanning every 30 minutes")
+        print(f"Scheduler started - scanning every {scan_interval} minutes")
     
     # Start position monitor thread
     if monitor_thread is None or not monitor_thread.is_alive():

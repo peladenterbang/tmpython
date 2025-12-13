@@ -241,6 +241,11 @@ Lot Size = (Account Balance × Risk%) / (SL Pips × Pip Value)
 - **Position Monitoring** - Track open positions, TP/SL triggers
 - **Trade Statistics** - Win rate, accuracy, total P&L
 
+Manual trigger if it not works 
+```
+python -c "from auto_scheduler import scheduled_scan; scheduled_scan()"
+```
+
 ### Supported Pairs
 
 | Category | Count | Examples |
