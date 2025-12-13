@@ -992,7 +992,7 @@ def scheduled_scan():
             print(f"Scan error for user {user['user_id']}: {e}")
 
 
-def start_scheduler(app):
+def start_scheduler():
     """Start the background scheduler"""
     global scheduler, monitor_thread, stop_monitor
     
@@ -1225,3 +1225,17 @@ def save_user_settings(user_id, settings):
     conn.close()
     
     log_action(user_id, 'SETTINGS_UPDATED', details=f"Method: {settings.get('trading_method', 'ML')}, Auto-execute: {settings.get('auto_execute', 0)}")
+
+
+if __name__ == '__main__':
+    print("Starting scheduler...")
+    start_scheduler()
+
+    try:
+        # Keep the main thread alive
+        while True:
+            time.sleep(2)
+    except (KeyboardInterrupt, SystemExit):
+        stop_scheduler()
+        print("Scheduler gracefully stopped.")
+
