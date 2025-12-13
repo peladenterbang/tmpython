@@ -715,7 +715,11 @@ def scan_markets_for_user(user_id):
         SELECT * FROM auto_settings WHERE user_id = ?
     ''', (user_id,)).fetchone()
     
-    if not settings or not settings['enabled']:
+    # Convert to dict for .get() method support
+    if settings:
+        settings = dict(settings)
+
+    if not settings or not settings.get('enabled'):
         conn.close()
         return
     
@@ -995,19 +999,27 @@ def start_scheduler(app):
     init_auto_tables()
     
     if scheduler is None:
+        # Get the minimum scan interval from enabled users
+        conn = get_db()
+        min_interval = conn.execute('SELECT MIN(scan_interval) FROM auto_settings WHERE enabled = 1').fetchone()[0]
+        conn.close()
+        
+        # Default to 30 minutes if no enabled users or no interval set
+        scan_interval = min_interval if min_interval else 30
+        
         scheduler = BackgroundScheduler()
         
-        # Add job to scan markets every 30 minutes
+        # Add job to scan markets at the configured interval
         scheduler.add_job(
             scheduled_scan, 
             'interval', 
-            minutes=30, 
+            minutes=scan_interval, 
             id='market_scan',
             replace_existing=True
         )
         
         scheduler.start()
-        print("Scheduler started - scanning every 30 minutes")
+        print(f"Scheduler started - scanning every {scan_interval} minutes")
     
     # Start position monitor thread
     if monitor_thread is None or not monitor_thread.is_alive():
